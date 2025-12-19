@@ -6,3 +6,6 @@ public with sharing class Test {
 
     }
 }
+
+//- test comment
+//- another test comment
