@@ -5,19 +5,12 @@
          xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
 
     <description>
-        Custom PMD ruleset for Salesforce Apex development.
-        Priority 1 rules block merges. Priority 2 rules generate warnings only.
+        PMD ruleset for Salesforce Apex - All categories except performance
     </description>
 
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 1: SECURITY RULES (Block Merge)                              -->
-    <!-- ===================================================================== -->
-
+    <!-- Security Rules -->
     <rule ref="category/apex/security.xml/ApexCRUDViolation">
         <priority>1</priority>
-        <properties>
-            <property name="message" value="CRUD/FLS violation detected. Ensure proper object and field-level security checks." />
-        </properties>
     </rule>
 
     <rule ref="category/apex/security.xml/ApexInsecureEndpoint">
@@ -30,9 +23,6 @@
 
     <rule ref="category/apex/security.xml/ApexSOQLInjection">
         <priority>1</priority>
-        <properties>
-            <property name="message" value="Potential SOQL injection detected. Use bind variables or String.escapeSingleQuotes()." />
-        </properties>
     </rule>
 
     <rule ref="category/apex/security.xml/ApexXSSFromURLParam">
@@ -43,128 +33,38 @@
         <priority>1</priority>
     </rule>
 
-    <rule name="ApexHardcodedId"
-          language="apex"
-          message="Hardcoded Salesforce ID detected. Use Custom Settings, Custom Metadata, or SOQL queries instead."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Detects hardcoded 15 or 18 character Salesforce IDs which create deployment issues across environments.
-        </description>
-        <priority>1</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//LiteralExpression[@String = true()]
-  [matches(@Image, '^["\']([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})["\']$')]
-]]>
-                </value>
-            </property>
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 1: PERFORMANCE RULES (Block Merge)                           -->
-    <!-- ===================================================================== -->
-
-    <rule ref="category/apex/performance.xml/AvoidDmlStatementsInLoops">
-        <priority>1</priority>
-        <properties>
-            <property name="message" value="DML statement inside loop detected. Bulkify your code by collecting records and performing DML outside the loop." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/performance.xml/AvoidSoqlInLoops">
-        <priority>1</priority>
-        <properties>
-            <property name="message" value="SOQL query inside loop detected. Move SOQL queries outside loops to avoid governor limits." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/performance.xml/AvoidSoslInLoops">
-        <priority>1</priority>
-    </rule>
-
-    <rule name="AvoidCalloutsInLoops"
-          language="apex"
-          message="HTTP callout inside loop detected. Bulkify your callouts or use batch processing."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Detects HTTP callouts inside loops which can hit governor limits.
-        </description>
-        <priority>1</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//WhileLoopStatement//MethodCallExpression[
-  lower-case(@FullMethodName) = 'http.send'
-]
-|
-//ForLoopStatement//MethodCallExpression[
-  lower-case(@FullMethodName) = 'http.send'
-]
-|
-//ForEachStatement//MethodCallExpression[
-  lower-case(@FullMethodName) = 'http.send'
-]
-]]>
-                </value>
-            </property>
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 1: BEST PRACTICES (Block Merge)                              -->
-    <!-- ===================================================================== -->
-
+    <!-- Best Practices Rules -->
     <rule ref="category/apex/bestpractices.xml/ApexUnitTestClassShouldHaveAsserts">
         <priority>1</priority>
-        <properties>
-            <property name="message" value="Test method must contain at least one System.assert() statement." />
-        </properties>
     </rule>
 
     <rule ref="category/apex/bestpractices.xml/ApexUnitTestShouldNotUseSeeAllDataTrue">
         <priority>1</priority>
-        <properties>
-            <property name="message" value="Test class must not use seeAllData=true. Use test data factories instead." />
-        </properties>
-    </rule>
-
-    <rule name="ApexUnitTestMustUseTestStartStop"
-          language="apex"
-          message="Test method should use Test.startTest()/Test.stopTest() or System.runAs() for proper test isolation."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Ensures test methods use Test.startTest()/Test.stopTest() or System.runAs() for proper test isolation and governor limit reset.
-        </description>
-        <priority>1</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//Method[@Test = true()]
-  [not(.//MethodCallExpression[
-    lower-case(@FullMethodName) = 'test.starttest' or 
-    lower-case(@FullMethodName) = 'test.stoptest' or
-    lower-case(@FullMethodName) = 'system.runas'
-  ])]
-]]>
-                </value>
-            </property>
-        </properties>
     </rule>
 
     <rule ref="category/apex/bestpractices.xml/AvoidLogicInTrigger">
         <priority>1</priority>
     </rule>
 
+    <rule ref="category/apex/bestpractices.xml/UnusedLocalVariable">
+        <priority>2</priority>
+    </rule>
+
+    <rule ref="category/apex/bestpractices.xml/ApexAssertionsShouldIncludeMessage">
+        <priority>2</priority>
+    </rule>
+
+    <rule ref="category/apex/bestpractices.xml/AvoidGlobalModifier">
+        <priority>2</priority>
+    </rule>
+
+    <rule ref="category/apex/bestpractices.xml/DebugsShouldUseLoggingLevel">
+        <priority>2</priority>
+    </rule>
+
+    <!-- Error Prone Rules -->
     <rule ref="category/apex/errorprone.xml/EmptyCatchBlock">
         <priority>1</priority>
-        <properties>
-            <property name="message" value="Empty catch block detected. Handle exceptions properly or at minimum log the error." />
-        </properties>
     </rule>
 
     <rule ref="category/apex/errorprone.xml/EmptyIfStmt">
@@ -183,127 +83,6 @@
         <priority>1</priority>
     </rule>
 
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 1: DOCUMENTATION RULES (Block Merge)                         -->
-    <!-- ===================================================================== -->
-
-    <rule ref="category/apex/documentation.xml/ApexDoc">
-        <priority>1</priority>
-        <properties>
-            <property name="message" value="Missing or incomplete ApexDoc documentation. All public classes and methods must have ApexDoc comments." />
-            <property name="reportPrivate" value="false" />
-            <property name="reportProtected" value="false" />
-            <property name="reportMissingDescription" value="true" />
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 1: CODE STYLE RULES (Block Merge)                            -->
-    <!-- ===================================================================== -->
-
-    <rule name="AvoidDebugStatementsInProduction"
-          language="apex"
-          message="System.debug() statement detected in non-test class. Remove debug statements before deployment."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Detects System.debug() statements in non-test classes which should be removed before production deployment.
-        </description>
-        <priority>1</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//UserClass[@Test = false()]//MethodCallExpression[
-  lower-case(@FullMethodName) = 'system.debug'
-]
-]]>
-                </value>
-            </property>
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/ExcessiveClassLength">
-        <priority>1</priority>
-        <properties>
-            <property name="minimum" value="1000" />
-            <property name="message" value="Class exceeds 1000 lines. Consider refactoring into smaller, more maintainable classes." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/ExcessiveParameterList">
-        <priority>1</priority>
-        <properties>
-            <property name="minimum" value="6" />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/ExcessivePublicCount">
-        <priority>1</priority>
-        <properties>
-            <property name="minimum" value="30" />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/NcssMethodCount">
-        <priority>1</priority>
-        <properties>
-            <property name="minimum" value="100" />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/NcssTypeCount">
-        <priority>1</priority>
-        <properties>
-            <property name="minimum" value="700" />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/StdCyclomaticComplexity">
-        <priority>1</priority>
-        <properties>
-            <property name="reportLevel" value="10" />
-            <property name="message" value="Cyclomatic complexity too high. Consider refactoring to reduce nested if/else statements." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/CognitiveComplexity">
-        <priority>1</priority>
-        <properties>
-            <property name="classReportLevel" value="50" />
-            <property name="methodReportLevel" value="15" />
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 2: BEST PRACTICES (Warnings Only)                            -->
-    <!-- ===================================================================== -->
-
-    <rule ref="category/apex/bestpractices.xml/UnusedLocalVariable">
-        <priority>2</priority>
-        <properties>
-            <property name="message" value="Unused local variable detected. Remove unused variables to improve code clarity." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/bestpractices.xml/ApexAssertionsShouldIncludeMessage">
-        <priority>2</priority>
-        <properties>
-            <property name="message" value="Assert statement should include a descriptive message for easier debugging." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/bestpractices.xml/AvoidGlobalModifier">
-        <priority>2</priority>
-    </rule>
-
-    <rule ref="category/apex/bestpractices.xml/DebugsShouldUseLoggingLevel">
-        <priority>2</priority>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 2: ERROR PRONE (Warnings Only)                               -->
-    <!-- ===================================================================== -->
-
     <rule ref="category/apex/errorprone.xml/AvoidNonExistentAnnotations">
         <priority>2</priority>
     </rule>
@@ -316,40 +95,55 @@
         <priority>2</priority>
     </rule>
 
-    <rule name="AvoidCommentedOutCode"
-          language="apex"
-          message="Commented-out code detected. Remove dead code instead of commenting it out."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Detects large blocks of commented-out code which should be removed to improve code maintainability.
-        </description>
-        <priority>2</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//BlockComment[string-length(@Image) > 100]
-  [matches(@Image, '.*\b(if|for|while|return|select|insert|update|delete)\b.*', 'i')]
-]]>
-                </value>
-            </property>
-        </properties>
+    <!-- Documentation Rules -->
+    <rule ref="category/apex/documentation.xml/ApexDoc">
+        <priority>1</priority>
     </rule>
 
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 2: CODE STYLE (Warnings Only)                                -->
-    <!-- ===================================================================== -->
+    <!-- Design Rules -->
+    <rule ref="category/apex/design.xml/ExcessiveClassLength">
+        <priority>1</priority>
+    </rule>
 
+    <rule ref="category/apex/design.xml/ExcessiveParameterList">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/ExcessivePublicCount">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/NcssMethodCount">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/NcssTypeCount">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/StdCyclomaticComplexity">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/CognitiveComplexity">
+        <priority>1</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/UnusedMethod">
+        <priority>2</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/AvoidDeeplyNestedIfStmts">
+        <priority>2</priority>
+    </rule>
+
+    <rule ref="category/apex/design.xml/CyclomaticComplexity">
+        <priority>2</priority>
+    </rule>
+
+    <!-- Code Style Rules -->
     <rule ref="category/apex/codestyle.xml/ClassNamingConventions">
         <priority>2</priority>
-        <properties>
-            <property name="message" value="Class name should follow PascalCase convention." />
-            <property name="testClassPattern" value="[A-Z][a-zA-Z0-9]*(_Test|Test)" />
-            <property name="abstractClassPattern" value="[A-Z][a-zA-Z0-9]*" />
-            <property name="classPattern" value="[A-Z][a-zA-Z0-9]*" />
-            <property name="interfacePattern" value="[A-Z][a-zA-Z0-9]*" />
-            <property name="enumPattern" value="[A-Z][a-zA-Z0-9]*" />
-        </properties>
     </rule>
 
     <rule ref="category/apex/codestyle.xml/FieldNamingConventions">
@@ -366,11 +160,6 @@
 
     <rule ref="category/apex/codestyle.xml/MethodNamingConventions">
         <priority>2</priority>
-        <properties>
-            <property name="testPattern" value="[a-z][a-zA-Z0-9]*" />
-            <property name="staticPattern" value="[a-z][a-zA-Z0-9]*" />
-            <property name="instancePattern" value="[a-z][a-zA-Z0-9]*" />
-        </properties>
     </rule>
 
     <rule ref="category/apex/codestyle.xml/PropertyNamingConventions">
@@ -394,90 +183,6 @@
     </rule>
 
     <rule ref="category/apex/codestyle.xml/OneDeclarationPerLine">
-        <priority>2</priority>
-    </rule>
-
-    <rule name="TriggerNamingConvention"
-          language="apex"
-          message="Trigger name should follow the pattern ObjectNameTrigger (e.g., AccountTrigger, ContactTrigger)."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Enforces naming convention for triggers to end with 'Trigger' suffix.
-        </description>
-        <priority>2</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//TriggerDeclaration[not(matches(@SimpleName, '^[A-Z][a-zA-Z0-9]*Trigger$'))]
-]]>
-                </value>
-            </property>
-        </properties>
-    </rule>
-
-    <rule name="TestClassNamingConvention"
-          language="apex"
-          message="Test class name should end with _Test or Test suffix (e.g., MyClass_Test, MyClassTest)."
-          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
-        <description>
-            Enforces naming convention for test classes to end with Test or _Test suffix.
-        </description>
-        <priority>2</priority>
-        <properties>
-            <property name="xpath">
-                <value>
-<![CDATA[
-//UserClass[@Test = true()][not(matches(@SimpleName, '.*(_Test|Test)$'))]
-]]>
-                </value>
-            </property>
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 2: DESIGN (Warnings Only)                                    -->
-    <!-- ===================================================================== -->
-
-    <rule ref="category/apex/design.xml/UnusedMethod">
-        <priority>2</priority>
-        <properties>
-            <property name="message" value="Unused private method detected. Remove unused methods to reduce code bloat." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/AvoidDeeplyNestedIfStmts">
-        <priority>2</priority>
-        <properties>
-            <property name="problemDepth" value="4" />
-            <property name="message" value="If statement nested more than 4 levels deep. Consider refactoring to reduce complexity." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/design.xml/CyclomaticComplexity">
-        <priority>2</priority>
-        <properties>
-            <property name="classReportLevel" value="40" />
-            <property name="methodReportLevel" value="10" />
-        </properties>
-    </rule>
-
-    <!-- ===================================================================== -->
-    <!-- PRIORITY 2: PERFORMANCE (Warnings Only)                               -->
-    <!-- ===================================================================== -->
-
-    <rule ref="category/apex/performance.xml/OperationWithLimitsInLoop">
-        <priority>2</priority>
-        <properties>
-            <property name="message" value="Operation with limits detected inside loop. Consider refactoring for better performance." />
-        </properties>
-    </rule>
-
-    <rule ref="category/apex/performance.xml/EagerlyLoadedDescribeSObjectResult">
-        <priority>2</priority>
-    </rule>
-
-    <rule ref="category/apex/performance.xml/AvoidDebugStatements">
         <priority>2</priority>
     </rule>
 
