@@ -7,6 +7,10 @@ on:
       - dev
       - uat
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   pmd-analysis:
     name: PMD Static Analysis
@@ -70,7 +74,7 @@ jobs:
             --format text \
             --rulesets .pmd/pmd-ruleset.xml \
             --no-cache \
-            --language apex \
+            --force-language apex \
             > pmd-output.txt 2>&1 || PMD_EXIT_CODE=$?
           
           # Display full output
