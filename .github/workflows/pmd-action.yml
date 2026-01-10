@@ -100,6 +100,14 @@ jobs:
           
           # Generate detailed report
           echo "## PMD Analysis Report" > pmd-report.txt
+          
+          # Add status indicator based on Priority 1 violations
+          if [ $PRIORITY_1_COUNT -gt 0 ]; then
+            echo "❌ **Failed** - Priority 1 violations must be fixed before merging" >> pmd-report.txt
+          else
+            echo "✅ **Passed** - No blocking violations found" >> pmd-report.txt
+          fi
+          
           echo "" >> pmd-report.txt
           echo "### Summary" >> pmd-report.txt
           echo "- **Files Analyzed:** $FILE_COUNT" >> pmd-report.txt
