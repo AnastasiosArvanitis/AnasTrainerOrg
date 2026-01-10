@@ -6,7 +6,7 @@ public with sharing class Test {
 
     }
     
-    public void testMethod() {
+    public void doSomething() {
         String unusedVar = 'This will trigger UnusedLocalVariable';
         
         Integer x = 5;
