@@ -62,34 +62,40 @@ jobs:
         id: pmd
         run: |
           CHANGED_FILES="${{ steps.changed-files.outputs.files }}"
-          FILE_LIST=$(echo $CHANGED_FILES | tr ' ' ',')
+          FILE_COUNT=$(echo "$CHANGED_FILES" | wc -w)
           
-          echo "Running PMD on files: $FILE_LIST"
-          echo "## PMD Analysis Report" > pmd-report.txt
-          echo "" >> pmd-report.txt
+          echo "Running PMD on files: $CHANGED_FILES"
           
-          # Run PMD and capture output
+          # Run PMD with JSON format for better parsing
           pmd check \
             --file-list <(echo $CHANGED_FILES | tr ' ' '\n') \
-            --format text \
+            --format json \
             --rulesets .pmd/pmd-ruleset.xml \
             --no-cache \
             --force-language apex \
-            > pmd-output.txt 2>&1 || PMD_EXIT_CODE=$?
+            > pmd-output.json 2>&1 || PMD_EXIT_CODE=$?
           
-          # Display full output
-          cat pmd-output.txt
+          # Display JSON output for debugging
+          echo "=== PMD JSON Output ==="
+          cat pmd-output.json
+          echo "======================="
           
-          # Parse violations
-          PRIORITY_1_COUNT=$(grep -c "priority 1" pmd-output.txt || true)
-          PRIORITY_2_COUNT=$(grep -c "priority 2" pmd-output.txt || true)
-          FILE_COUNT=$(echo "$CHANGED_FILES" | wc -w)
+          # Parse JSON to count violations by priority
+          if [ -f pmd-output.json ]; then
+            PRIORITY_1_COUNT=$(jq '[.files[].violations[] | select(.priority == 1)] | length' pmd-output.json 2>/dev/null || echo "0")
+            PRIORITY_2_COUNT=$(jq '[.files[].violations[] | select(.priority == 2)] | length' pmd-output.json 2>/dev/null || echo "0")
+          else
+            PRIORITY_1_COUNT=0
+            PRIORITY_2_COUNT=0
+          fi
           
           echo "priority1=$PRIORITY_1_COUNT" >> $GITHUB_OUTPUT
           echo "priority2=$PRIORITY_2_COUNT" >> $GITHUB_OUTPUT
           echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
           
           # Generate detailed report
+          echo "## PMD Analysis Report" > pmd-report.txt
+          echo "" >> pmd-report.txt
           echo "### Summary" >> pmd-report.txt
           echo "- **Files Analyzed:** $FILE_COUNT" >> pmd-report.txt
           echo "- **Priority 1 Violations (Blocking):** $PRIORITY_1_COUNT" >> pmd-report.txt
@@ -99,17 +105,13 @@ jobs:
           if [ $PRIORITY_1_COUNT -gt 0 ] || [ $PRIORITY_2_COUNT -gt 0 ]; then
             echo "### Violations" >> pmd-report.txt
             echo "" >> pmd-report.txt
-            echo "| File | Rule | Priority | Message |" >> pmd-report.txt
-            echo "|------|------|----------|---------|" >> pmd-report.txt
+            echo "| File | Line | Rule | Priority | Message |" >> pmd-report.txt
+            echo "|------|------|------|----------|---------|" >> pmd-report.txt
             
-            # Parse violations into table format
-            grep -E "^.*\.(cls|trigger):" pmd-output.txt | while read line; do
-              FILE=$(echo "$line" | cut -d':' -f1 | xargs basename)
-              RULE=$(echo "$line" | grep -oP '\[.*?\]' | tr -d '[]' || echo "N/A")
-              PRIORITY=$(echo "$line" | grep -oP 'priority \d' || echo "N/A")
-              MESSAGE=$(echo "$line" | sed -E 's/.*\[.*\]//' | xargs)
-              echo "| $FILE | $RULE | $PRIORITY | $MESSAGE |" >> pmd-report.txt
-            done
+            # Parse JSON violations into table
+            jq -r '.files[] | .filename as $file | .violations[] | 
+              "| \($file | split("/") | .[-1]) | \(.beginLine) | \(.rule) | P\(.priority) | \(.description) |"' \
+              pmd-output.json 2>/dev/null >> pmd-report.txt || true
           else
             echo "✅ No violations found!" >> pmd-report.txt
           fi
