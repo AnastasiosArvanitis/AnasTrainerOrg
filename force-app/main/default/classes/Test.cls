@@ -1,29 +1,36 @@
 /* 
-Testing PMD violations for Copilot PR review
+Testing PMD violations for Copilot PR review - FIXED VERSION
 */
+
+/**
+ * @description Test class for demonstrating PMD violation fixes
+ * @author Copilot Team
+ * @date 2026-01-15
+ */
 public with sharing class Test {
     
+    /**
+     * @description Processes input data with proper error handling
+     * @param input The string input to process
+     */
     public void processData(String input) {
-        String unusedVariable = 'This triggers UnusedLocalVariable';
-        
         Integer count = 5;
-        if (count > 0)
-            System.debug('No braces - triggers IfStmtsMustUseBraces');
+        if (count > 0) {
+            System.debug(LoggingLevel.DEBUG, 'Count is positive: ' + count);
+        }
         
         try {
             Integer result = Integer.valueOf(input);
+            System.debug(LoggingLevel.INFO, 'Parsed result: ' + result);
         } catch (Exception e) {
-            // Empty catch block - Priority 1 violation
+            System.debug(LoggingLevel.ERROR, 'Error parsing input: ' + e.getMessage());
         }
         
         Integer index = 0;
-        while (index < 3)
+        while (index < 3) {
             index++;
+        }
         
-        System.debug('No log level - triggers DebugsShouldUseLoggingLevel');
-    }
-    
-    private void helperMethod() {
-        String data = 'This method is never called - triggers UnusedMethod';
+        System.debug(LoggingLevel.DEBUG, 'Processing completed successfully');
     }
 }
