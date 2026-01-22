@@ -23,6 +23,7 @@ public with sharing class Test {
      */
     public static Integer multiply(Integer a, Integer b) {
         return a * b;
+        // great job
     }
     
     /**
