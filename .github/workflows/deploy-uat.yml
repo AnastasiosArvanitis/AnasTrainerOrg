@@ -71,11 +71,11 @@ jobs:
         run: |
           echo "Detecting changed Apex classes..."
           
-          # Extract Apex class files from changed files
-          APEX_CLASSES=$(echo "$CHANGED_FILES" | tr ',' '\n' | grep '\.cls$' | grep -v 'meta.xml' || true)
+          # Extract Apex class files from changed files, excluding test classes and meta.xml
+          APEX_CLASSES=$(echo "$CHANGED_FILES" | tr ',' '\n' | grep '\.cls$' | grep -v 'meta.xml' | grep -v '_Test\.cls$' || true)
           
           if [ -z "$APEX_CLASSES" ]; then
-            echo "No Apex classes changed"
+            echo "No Apex classes changed (excluding test classes)"
             echo "has_tests=false" >> $GITHUB_OUTPUT
             echo "TEST_LEVEL=NoTestRun" >> $GITHUB_ENV
             exit 0
@@ -94,7 +94,7 @@ jobs:
             if [ -z "$TEST_CLASSES" ]; then
               TEST_CLASSES="$test_class_name"
             else
-              TEST_CLASSES="$TEST_CLASSES,$test_class_name"
+              TEST_CLASSES="$TEST_CLASSES $test_class_name"
             fi
           done
           
@@ -130,7 +130,12 @@ jobs:
           # Add test level
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
             echo "Running specified tests: $TEST_CLASSES"
-            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests --tests $TEST_CLASSES"
+            # Build test classes with repeated --tests flag for each class
+            TEST_FLAGS=""
+            for test_class in $TEST_CLASSES; do
+              TEST_FLAGS="$TEST_FLAGS --tests $test_class"
+            done
+            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests$TEST_FLAGS"
           else
             echo "No tests will be run (NoTestRun)"
             DEPLOY_CMD="$DEPLOY_CMD --test-level NoTestRun"
