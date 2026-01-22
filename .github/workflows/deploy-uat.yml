@@ -22,12 +22,21 @@ jobs:
           npm install -g @salesforce/cli
           sf --version
       
-      # Step 3: Authenticate to UAT Sandbox
+      # Step 3: Authenticate to UAT Sandbox using JWT
       - name: Authenticate to UAT
         run: |
-          echo "Authenticating to UAT sandbox..."
-          echo "${{ secrets.SF_PASSWORD }}${{ secrets.SF_SECURITY_TOKEN }}" | sf org login user --instance-url https://test.salesforce.com --username "${{ secrets.SF_USERNAME }}" --set-default --no-prompt
-          echo "Authentication successful"
+          echo "Authenticating to UAT sandbox using JWT Bearer Flow..."
+          
+          # Create server.key file from GitHub secret
+          echo "${{ secrets.SF_JWT_KEY }}" > server.key
+          
+          # Authenticate using JWT
+          sf org login jwt --client-id "${{ secrets.SF_CONSUMER_KEY }}" --jwt-key-file server.key --username "${{ secrets.SF_USERNAME }}" --instance-url "https://${{ secrets.SF_INSTANCE_URL }}" --set-default --alias uat
+          
+          # Remove the private key file for security
+          rm server.key
+          
+          echo "✅ Authentication successful"
       
       # Step 4: Detect changed metadata files
       - name: Detect changed metadata files
