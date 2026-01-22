@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "uat"
+  workflow_dispatch:
 
 jobs:
   deploy-uat:
