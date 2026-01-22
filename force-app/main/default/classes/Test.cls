@@ -33,4 +33,16 @@ public with sharing class Test {
     public static Boolean isEmpty(String str) {
         return String.isBlank(str);
     }
+    
+    /**
+     * @description Get greeting message for a given name
+     * @param name Person's name
+     * @return Greeting message
+     */
+    public static String greet(String name) {
+        if (String.isBlank(name)) {
+            return 'Hello, Guest!';
+        }
+        return 'Hello, ' + name + '!';
+    }
 }

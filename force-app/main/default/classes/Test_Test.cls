@@ -49,4 +49,23 @@ private class Test_Test {
         Boolean result4 = Test.isEmpty('Hello');
         System.assertEquals(false, result4, 'Valid string should return false');
     }
+    
+    @isTest
+    static void testGreet() {
+        // Test with valid name
+        String result1 = Test.greet('John');
+        System.assertEquals('Hello, John!', result1, 'Should return greeting with name');
+        
+        // Test with null name
+        String result2 = Test.greet(null);
+        System.assertEquals('Hello, Guest!', result2, 'Should return guest greeting for null');
+        
+        // Test with empty name
+        String result3 = Test.greet('');
+        System.assertEquals('Hello, Guest!', result3, 'Should return guest greeting for empty string');
+        
+        // Test with whitespace name
+        String result4 = Test.greet('   ');
+        System.assertEquals('Hello, Guest!', result4, 'Should return guest greeting for whitespace');
+    }
 }
