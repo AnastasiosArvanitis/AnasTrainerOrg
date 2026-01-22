@@ -27,14 +27,15 @@ jobs:
         run: |
           echo "Authenticating to UAT sandbox using JWT Bearer Flow..."
           
-          # Create server.key file from GitHub secret
-          echo "${{ secrets.SF_JWT_KEY }}" > server.key
+          # Create a secure temporary file for the private key from GitHub secret
+          KEY_FILE=$(mktemp)
+          printf '%s' "${{ secrets.SF_JWT_KEY }}" > "$KEY_FILE"
           
           # Authenticate using JWT
-          sf org login jwt --client-id "${{ secrets.SF_CONSUMER_KEY }}" --jwt-key-file server.key --username "${{ secrets.SF_USERNAME }}" --instance-url "https://${{ secrets.SF_INSTANCE_URL }}" --set-default --alias uat
+          sf org login jwt --client-id "${{ secrets.SF_CONSUMER_KEY }}" --jwt-key-file "$KEY_FILE" --username "${{ secrets.SF_USERNAME }}" --instance-url "https://${{ secrets.SF_INSTANCE_URL }}" --set-default --alias uat
           
           # Remove the private key file for security
-          rm server.key
+          rm -f "$KEY_FILE"
           
           echo "✅ Authentication successful"
       
