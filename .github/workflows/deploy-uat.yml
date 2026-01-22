@@ -146,18 +146,24 @@ jobs:
           DEPLOY_CMD="$DEPLOY_CMD --json"
           
           echo "Executing: $DEPLOY_CMD"
-          
-          # Execute deployment
-          DEPLOY_RESULT=$(eval $DEPLOY_CMD)
+           and capture output
+          set +e  # Don't exit on error, we want to capture it
+          DEPLOY_RESULT=$(eval $DEPLOY_CMD 2>&1)
           DEPLOY_STATUS=$?
+          set -e  # Re-enable exit on error
           
+          echo "=== Deployment Output ==="
           echo "$DEPLOY_RESULT"
+          echo "========================="
           
           # Save results to file
           echo "$DEPLOY_RESULT" > deploy-results.json
           
           # Check deployment status
           if [ $DEPLOY_STATUS -ne 0 ]; then
+            echo "❌ Deployment failed with exit code $DEPLOY_STATUS"
+            echo "Full error output:"
+            cat deploy-results.json then
             echo "❌ Deployment failed"
             echo "deployment_status=failed" >> $GITHUB_OUTPUT
             exit 1
