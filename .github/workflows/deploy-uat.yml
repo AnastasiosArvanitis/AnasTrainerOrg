@@ -146,11 +146,12 @@ jobs:
           DEPLOY_CMD="$DEPLOY_CMD --json"
           
           echo "Executing: $DEPLOY_CMD"
-           and capture output
-          set +e  # Don't exit on error, we want to capture it
+          
+          # Execute deployment and capture output
+          set +e
           DEPLOY_RESULT=$(eval $DEPLOY_CMD 2>&1)
           DEPLOY_STATUS=$?
-          set -e  # Re-enable exit on error
+          set -e
           
           echo "=== Deployment Output ==="
           echo "$DEPLOY_RESULT"
