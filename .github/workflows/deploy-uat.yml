@@ -1,9 +1,6 @@
 name: Deploy to UAT
 
 on:
-  push:
-    branches:
-      - "uat"
   workflow_dispatch:
 
 jobs:
@@ -14,8 +11,6 @@ jobs:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       
       # Step 2: Install Salesforce CLI
       - name: Install Salesforce CLI
@@ -40,93 +35,52 @@ jobs:
           
           echo "✅ Authentication successful"
       
-      # Step 4: Detect changed metadata files
-      - name: Detect changed metadata files
-        id: detect-changes
-        run: |
-          echo "Detecting changed metadata files..."
-          
-          # Get the list of changed files in the last merge
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | grep '^force-app/' || true)
-          
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "No metadata files changed in force-app directory"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-          
-          # Convert newline-separated list to comma-separated
-          CHANGED_FILES_CSV=$(echo "$CHANGED_FILES" | tr '\n' ',' | sed 's/,$//')
-          
-          echo "has_changes=true" >> $GITHUB_OUTPUT
-          echo "changed_files=$CHANGED_FILES_CSV" >> $GITHUB_OUTPUT
-          echo "CHANGED_FILES=$CHANGED_FILES_CSV" >> $GITHUB_ENV
-      
-      # Step 5: Detect changed Apex classes and derive test class names
-      - name: Detect Apex test classes
+      # Step 4: Detect Apex classes for test execution
+      - name: Detect Apex classes for testing
         id: detect-tests
-        if: steps.detect-changes.outputs.has_changes == 'true'
         run: |
-          echo "Detecting changed Apex classes..."
+          echo "Detecting Apex classes in force-app directory..."
           
-          # Extract Apex class files from changed files, excluding test classes and meta.xml
-          APEX_CLASSES=$(echo "$CHANGED_FILES" | tr ',' '\n' | grep '\.cls$' | grep -v 'meta.xml' | grep -v '_Test\.cls$' || true)
+          # Find all Apex class files, excluding test classes and meta.xml
+          APEX_CLASSES=$(find force-app -name "*.cls" -not -name "*_Test.cls" -not -name "*.cls-meta.xml" || true)
           
           if [ -z "$APEX_CLASSES" ]; then
-            echo "No Apex classes changed (excluding test classes)"
-            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "No Apex classes found"
+            echo "has_apex=false" >> $GITHUB_OUTPUT
             echo "TEST_LEVEL=NoTestRun" >> $GITHUB_ENV
-            exit 0
-          fi
-          
-          echo "Changed Apex classes:"
-          echo "$APEX_CLASSES"
-          
-          # Extract class names and append _Test
-          TEST_CLASSES=""
-          for class_file in $APEX_CLASSES; do
-            # Extract just the class name without path and extension
-            class_name=$(basename "$class_file" .cls)
-            test_class_name="${class_name}_Test"
+          else
+            echo "Found Apex classes:"
+            echo "$APEX_CLASSES"
             
-            if [ -z "$TEST_CLASSES" ]; then
-              TEST_CLASSES="$test_class_name"
-            else
-              TEST_CLASSES="$TEST_CLASSES $test_class_name"
-            fi
-          done
-          
-          echo "Test classes to run: $TEST_CLASSES"
-          echo "has_tests=true" >> $GITHUB_OUTPUT
-          echo "test_classes=$TEST_CLASSES" >> $GITHUB_OUTPUT
-          echo "TEST_CLASSES=$TEST_CLASSES" >> $GITHUB_ENV
-          echo "TEST_LEVEL=RunSpecifiedTests" >> $GITHUB_ENV
-        env:
-          CHANGED_FILES: ${{ steps.detect-changes.outputs.changed_files }}
+            # Build list of test classes
+            TEST_CLASSES=""
+            for class_file in $APEX_CLASSES; do
+              class_name=$(basename "$class_file" .cls)
+              test_class_name="${class_name}_Test"
+              
+              if [ -z "$TEST_CLASSES" ]; then
+                TEST_CLASSES="$test_class_name"
+              else
+                TEST_CLASSES="$TEST_CLASSES $test_class_name"
+              fi
+            done
+            
+            echo "Test classes to run: $TEST_CLASSES"
+            echo "has_apex=true" >> $GITHUB_OUTPUT
+            echo "test_classes=$TEST_CLASSES" >> $GITHUB_OUTPUT
+            echo "TEST_CLASSES=$TEST_CLASSES" >> $GITHUB_ENV
+            echo "TEST_LEVEL=RunSpecifiedTests" >> $GITHUB_ENV
+          fi
       
-      # Step 6: Exit if no changes detected
-      - name: Exit if no changes
-        if: steps.detect-changes.outputs.has_changes == 'false'
-        run: |
-          echo "✅ No metadata changes detected. Workflow completed successfully."
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "No metadata files were changed in this merge." >> $GITHUB_STEP_SUMMARY
-          echo "Deployment skipped." >> $GITHUB_STEP_SUMMARY
-      
-      # Step 7: Deploy changed metadata with appropriate test level
+      # Step 5: Deploy all metadata to UAT
       - name: Deploy to UAT
-        if: steps.detect-changes.outputs.has_changes == 'true'
         id: deploy
         run: |
-          echo "Deploying changed metadata to UAT..."
-          echo "Changed files: $CHANGED_FILES"
+          echo "🚀 Deploying all metadata from force-app to UAT..."
           echo "Test level: $TEST_LEVEL"
           
           # Build the deployment command
-          DEPLOY_CMD="sf project deploy start --source-dir $(echo $CHANGED_FILES | tr ',' ' ')"
+          DEPLOY_CMD="sf project deploy start --source-dir force-app"
           
           # Add test level
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
@@ -146,11 +100,12 @@ jobs:
           DEPLOY_CMD="$DEPLOY_CMD --json"
           
           echo "Executing: $DEPLOY_CMD"
-           and capture output
-          set +e  # Don't exit on error, we want to capture it
+          
+          # Execute deployment and capture output
+          set +e
           DEPLOY_RESULT=$(eval $DEPLOY_CMD 2>&1)
           DEPLOY_STATUS=$?
-          set -e  # Re-enable exit on error
+          set -e
           
           echo "=== Deployment Output ==="
           echo "$DEPLOY_RESULT"
@@ -163,8 +118,7 @@ jobs:
           if [ $DEPLOY_STATUS -ne 0 ]; then
             echo "❌ Deployment failed with exit code $DEPLOY_STATUS"
             echo "Full error output:"
-            cat deploy-results.json then
-            echo "❌ Deployment failed"
+            cat deploy-results.json
             echo "deployment_status=failed" >> $GITHUB_OUTPUT
             exit 1
           else
@@ -172,39 +126,38 @@ jobs:
             echo "deployment_status=success" >> $GITHUB_OUTPUT
           fi
       
-      # Step 8: Upload test results as artifacts
-      - name: Upload test results
-        if: steps.detect-changes.outputs.has_changes == 'true' && always()
+      # Step 6: Upload deployment results as artifacts
+      - name: Upload deployment results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deployment-results
           path: deploy-results.json
           retention-days: 30
       
-      # Step 9: Add deployment summary
+      # Step 7: Add deployment summary
       - name: Add deployment summary
-        if: steps.detect-changes.outputs.has_changes == 'true' && always()
+        if: always()
         run: |
           echo "## 🚀 UAT Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** uat" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### Changed Files" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "$CHANGED_FILES" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed all metadata from \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
             echo "### Test Classes Executed" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "$TEST_CLASSES" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo "$TEST_CLASSES" | tr ' ' '\n' >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Tests" >> $GITHUB_STEP_SUMMARY
-            echo "No Apex tests were executed (no Apex classes modified)." >> $GITHUB_STEP_SUMMARY
+            echo "No Apex tests were executed (no Apex classes found)." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
