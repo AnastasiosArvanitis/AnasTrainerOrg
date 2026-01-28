@@ -67,7 +67,7 @@ jobs:
             for test_class in $TEST_CLASSES; do
               TEST_FLAGS="$TEST_FLAGS --tests $test_class"
             done
-            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests$TEST_FLAGS"
+            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests $TEST_FLAGS"
           else
             echo "Running local tests (RunLocalTests)"
             DEPLOY_CMD="$DEPLOY_CMD --test-level RunLocalTests"
