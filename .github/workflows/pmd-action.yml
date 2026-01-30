@@ -1,0 +1,170 @@
+name: PMD Static Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - uat
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pmd-analysis:
+    name: PMD Static Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Get changed Apex files
+        id: changed-files
+        run: |
+          echo "Fetching base branch..."
+          git fetch origin ${{ github.base_ref }}
+          
+          echo "Detecting changed files between origin/${{ github.base_ref }} and HEAD..."
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD | \
+            grep -E '\.(cls|trigger)$' || true)
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No Apex files changed. Skipping PMD analysis."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "files=" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            
+            # Convert newlines to spaces for file list
+            FILE_LIST=$(echo "$CHANGED_FILES" | tr '\n' ' ' | sed 's/ $//')
+            echo "files=$FILE_LIST" >> $GITHUB_OUTPUT
+            
+            echo "Changed Apex files:"
+            echo "$CHANGED_FILES"
+            echo ""
+            echo "Total files: $(echo "$CHANGED_FILES" | wc -l)"
+          fi
+
+      - name: Install PMD
+        if: steps.changed-files.outputs.skip == 'false'
+        run: |
+          PMD_VERSION="7.0.0"
+          wget https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip
+          unzip pmd-dist-${PMD_VERSION}-bin.zip
+          echo "${GITHUB_WORKSPACE}/pmd-bin-${PMD_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Run PMD Analysis
+        if: steps.changed-files.outputs.skip == 'false'
+        id: pmd
+        run: |
+          CHANGED_FILES="${{ steps.changed-files.outputs.files }}"
+          FILE_COUNT=$(echo "$CHANGED_FILES" | wc -w)
+          
+          echo "Running PMD on files: $CHANGED_FILES"
+          
+          # Run PMD with JSON format and write to file to avoid stdout mixing
+          pmd check \
+            --file-list <(echo $CHANGED_FILES | tr ' ' '\n') \
+            --format json \
+            --rulesets .pmd/pmd-ruleset.xml \
+            --no-cache \
+            --no-progress \
+            --force-language apex \
+            -r pmd-output.json \
+            || PMD_EXIT_CODE=$?
+          
+          # Display JSON output for debugging
+          echo "=== PMD JSON Output ==="
+          cat pmd-output.json
+          echo "======================="
+          
+          # Parse JSON to count violations by priority
+          if [ -f pmd-output.json ]; then
+            PRIORITY_1_COUNT=$(jq '[.files[].violations[] | select(.priority == 1)] | length' pmd-output.json 2>/dev/null || echo "0")
+            PRIORITY_2_COUNT=$(jq '[.files[].violations[] | select(.priority == 2)] | length' pmd-output.json 2>/dev/null || echo "0")
+          else
+            PRIORITY_1_COUNT=0
+            PRIORITY_2_COUNT=0
+          fi
+          
+          echo "Priority 1 Count: $PRIORITY_1_COUNT"
+          echo "Priority 2 Count: $PRIORITY_2_COUNT"
+          
+          echo "priority1=$PRIORITY_1_COUNT" >> $GITHUB_OUTPUT
+          echo "priority2=$PRIORITY_2_COUNT" >> $GITHUB_OUTPUT
+          echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
+          
+          # Generate detailed report
+          echo "## PMD Analysis Report" > pmd-report.txt
+          
+          # Add status indicator based on Priority 1 violations
+          if [ $PRIORITY_1_COUNT -gt 0 ]; then
+            echo "❌ **Failed** - Priority 1 violations must be fixed before merging" >> pmd-report.txt
+          else
+            echo "✅ **Passed** - No blocking violations found" >> pmd-report.txt
+          fi
+          
+          echo "" >> pmd-report.txt
+          echo "### Summary" >> pmd-report.txt
+          echo "- **Files Analyzed:** $FILE_COUNT" >> pmd-report.txt
+          echo "- **Priority 1 Violations (Blocking):** $PRIORITY_1_COUNT" >> pmd-report.txt
+          echo "- **Priority 2 Warnings:** $PRIORITY_2_COUNT" >> pmd-report.txt
+          echo "" >> pmd-report.txt
+          
+          if [ $PRIORITY_1_COUNT -gt 0 ] || [ $PRIORITY_2_COUNT -gt 0 ]; then
+            echo "### Violations" >> pmd-report.txt
+            echo "" >> pmd-report.txt
+            echo "| File | Line | Rule | Priority | Message |" >> pmd-report.txt
+            echo "|------|------|------|----------|---------|" >> pmd-report.txt
+            
+            # Parse JSON violations into table
+            jq -r '.files[] | .filename as $file | .violations[] | 
+              "| \($file | split("/") | .[-1]) | \(.beginline) | \(.rule) | P\(.priority) | \(.description) |"' \
+              pmd-output.json 2>/dev/null >> pmd-report.txt || true
+          else
+            echo "✅ No violations found!" >> pmd-report.txt
+          fi
+          
+          cat pmd-report.txt
+          
+          # Save exit decision
+          if [ $PRIORITY_1_COUNT -gt 0 ]; then
+            echo "should_fail=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_fail=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment PR
+        if: steps.changed-files.outputs.skip == 'false' && always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('pmd-report.txt', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔍 PMD Static Analysis Results\n\n${report}`
+            });
+
+      - name: Fail on Priority 1 violations
+        if: steps.changed-files.outputs.skip == 'false' && steps.pmd.outputs.should_fail == 'true'
+        run: |
+          echo "❌ Build failed due to Priority 1 PMD violations."
+          echo "Please fix the violations before merging."
+          exit 1
+
+      - name: Success
+        if: steps.changed-files.outputs.skip == 'false' && steps.pmd.outputs.should_fail == 'false'
+        run: |
+          echo "✅ PMD analysis passed!"
+          if [ "${{ steps.pmd.outputs.priority2 }}" -gt 0 ]; then
+            echo "⚠️  Note: ${{ steps.pmd.outputs.priority2 }} Priority 2 warning(s) found."
+          fi
