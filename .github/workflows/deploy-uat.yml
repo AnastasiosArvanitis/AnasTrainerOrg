@@ -1,0 +1,168 @@
+name: Deploy to UAT
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-uat:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Install Salesforce CLI
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli
+          sf --version
+      
+      # Step 3: Authenticate to UAT Sandbox using JWT
+      - name: Authenticate to UAT
+        run: |
+          echo "Authenticating to UAT sandbox using JWT Bearer Flow..."
+          
+          # Create a secure temporary file for the private key from GitHub secret
+          KEY_FILE=$(mktemp)
+          printf '%s' "${{ secrets.SF_JWT_KEY }}" > "$KEY_FILE"
+          
+          # Authenticate using JWT
+          sf org login jwt --client-id "${{ secrets.SF_CONSUMER_KEY }}" --jwt-key-file "$KEY_FILE" --username "${{ secrets.SF_USERNAME }}" --instance-url "https://${{ secrets.SF_INSTANCE_URL }}" --set-default --alias uat
+          
+          # Remove the private key file for security
+          rm -f "$KEY_FILE"
+          
+          echo "✅ Authentication successful"
+      
+      # Step 4: Detect Apex classes for test execution
+      - name: Detect Apex classes for testing
+        id: detect-tests
+        run: |
+          echo "Detecting Apex classes in force-app directory..."
+          
+          # Find all Apex class files, excluding test classes and meta.xml
+          APEX_CLASSES=$(find force-app -name "*.cls" -not -name "*_Test.cls" -not -name "*.cls-meta.xml" || true)
+          
+          if [ -z "$APEX_CLASSES" ]; then
+            echo "No Apex classes found"
+            echo "has_apex=false" >> $GITHUB_OUTPUT
+            echo "TEST_LEVEL=NoTestRun" >> $GITHUB_ENV
+          else
+            echo "Found Apex classes:"
+            echo "$APEX_CLASSES"
+            
+            # Build list of test classes
+            TEST_CLASSES=""
+            for class_file in $APEX_CLASSES; do
+              class_name=$(basename "$class_file" .cls)
+              test_class_name="${class_name}_Test"
+              
+              if [ -z "$TEST_CLASSES" ]; then
+                TEST_CLASSES="$test_class_name"
+              else
+                TEST_CLASSES="$TEST_CLASSES $test_class_name"
+              fi
+            done
+            
+            echo "Test classes to run: $TEST_CLASSES"
+            echo "has_apex=true" >> $GITHUB_OUTPUT
+            echo "test_classes=$TEST_CLASSES" >> $GITHUB_OUTPUT
+            echo "TEST_CLASSES=$TEST_CLASSES" >> $GITHUB_ENV
+            echo "TEST_LEVEL=RunSpecifiedTests" >> $GITHUB_ENV
+          fi
+      
+      # Step 5: Deploy all metadata to UAT
+      - name: Deploy to UAT
+        id: deploy
+        run: |
+          echo "🚀 Deploying all metadata from force-app to UAT..."
+          echo "Test level: $TEST_LEVEL"
+          
+          # Build the deployment command
+          DEPLOY_CMD="sf project deploy start --source-dir force-app"
+          
+          # Add test level
+          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
+            echo "Running specified tests: $TEST_CLASSES"
+            # Build test classes with repeated --tests flag for each class
+            TEST_FLAGS=""
+            for test_class in $TEST_CLASSES; do
+              TEST_FLAGS="$TEST_FLAGS --tests $test_class"
+            done
+            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests$TEST_FLAGS"
+          else
+            echo "No tests will be run (NoTestRun)"
+            DEPLOY_CMD="$DEPLOY_CMD --test-level NoTestRun"
+          fi
+          
+          # Add JSON output for parsing
+          DEPLOY_CMD="$DEPLOY_CMD --json"
+          
+          echo "Executing: $DEPLOY_CMD"
+          
+          # Execute deployment and capture output
+          set +e
+          DEPLOY_RESULT=$(eval $DEPLOY_CMD 2>&1)
+          DEPLOY_STATUS=$?
+          set -e
+          
+          echo "=== Deployment Output ==="
+          echo "$DEPLOY_RESULT"
+          echo "========================="
+          
+          # Save results to file
+          echo "$DEPLOY_RESULT" > deploy-results.json
+          
+          # Check deployment status
+          if [ $DEPLOY_STATUS -ne 0 ]; then
+            echo "❌ Deployment failed with exit code $DEPLOY_STATUS"
+            echo "Full error output:"
+            cat deploy-results.json
+            echo "deployment_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ Deployment successful"
+            echo "deployment_status=success" >> $GITHUB_OUTPUT
+          fi
+      
+      # Step 6: Upload deployment results as artifacts
+      - name: Upload deployment results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-results
+          path: deploy-results.json
+          retention-days: 30
+      
+      # Step 7: Add deployment summary
+      - name: Add deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 UAT Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed all metadata from \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
+            echo "### Test Classes Executed" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "$TEST_CLASSES" | tr ' ' '\n' >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Tests" >> $GITHUB_STEP_SUMMARY
+            echo "No Apex tests were executed (no Apex classes found)." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
+            echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
