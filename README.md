@@ -1,6 +1,15 @@
 # Salesforce DX Project: Next Steps
 
-Now that you’ve created a Salesforce DX project, what’s next? Here are some documentation resources to get you started.
+Now that you've created a Salesforce DX project, what's next? Here are some documentation resources to get you started.
+
+## CI/CD Workflows
+
+This repository includes automated GitHub Actions workflows for deployment and code quality:
+
+- **[GitHub Actions Workflows Documentation](docs/GITHUB_ACTIONS_WORKFLOWS.md)** - Comprehensive guide to the CI/CD pipeline
+  - PMD Static Analysis for code quality
+  - UAT Deployment workflow
+  - Production Deployment workflow
 
 ## How Do You Plan to Deploy Your Changes?
 
