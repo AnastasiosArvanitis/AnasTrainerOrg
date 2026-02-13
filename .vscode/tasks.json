@@ -1,0 +1,100 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SF: Deploy current file to DEV",
+      "type": "shell",
+      "command": "sf project deploy start -m ApexClass:${fileBasenameNoExtension}",
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Validate current ApexClass",
+      "type": "shell",
+      "command": "sf project deploy start -m ApexClass:${fileBasenameNoExtension} --dry-run",
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Validate from package.xml",
+      "type": "shell",
+      "command": "sf project deploy start --manifest manifest/package.xml --dry-run",
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Retrieve ApexClass Class",
+      "type": "shell",
+      "command": "sf project retrieve start -m ApexClass:${fileBasenameNoExtension}",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Run ALL Apex tests",
+      "type": "shell",
+      "command": "sf apex run test --test-level RunLocalTests --result-format human --wait 10",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Run ONE Apex test class (manual input)",
+      "type": "shell",
+      "command": "sf apex run test -n ${input:testClassName} --result-format human --wait 10",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Run Apex tests for CURRENT file",
+      "type": "shell",
+      "command": "sf apex run test -n ${fileBasenameNoExtension} --result-format human --wait 10",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "SF: Open Org",
+      "type": "shell",
+      "command": "sf org open",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testClassName",
+      "type": "promptString",
+      "description": "Enter the Apex test class name"
+    }
+  ]
+}
