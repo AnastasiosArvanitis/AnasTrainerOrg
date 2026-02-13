@@ -13,7 +13,7 @@
       }
     },
     {
-      "label": "SF: Validate CURRENT file",
+      "label": "SF: Validate current ApexClass",
       "type": "shell",
       "command": "sf project deploy start -m ApexClass:${fileBasenameNoExtension} --dry-run",
       "group": "build",
