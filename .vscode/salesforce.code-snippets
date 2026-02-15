@@ -1,0 +1,194 @@
+{
+  "Apex: Create Account Instance": {
+    "prefix": "acc",
+    "body": [
+      "Account ${1:acc} = new Account(",
+      "    Name = '${2:Test Account}'",
+      ");"
+    ],
+    "description": "Create an Account instance"
+  },
+
+  "Apex: Create Contact Instance": {
+    "prefix": "con",
+    "body": [
+      "Contact ${1:con} = new Contact(",
+      "    FirstName = '${2:First}',",
+      "    LastName = '${3:Last}'",
+      ");"
+    ],
+    "description": "Create a Contact instance"
+  },
+
+  "Apex: List of Accounts": {
+    "prefix": "acclist",
+    "body": [
+      "List<Account> ${1:accList} = new List<Account>{",
+      "    new Account(Name = '${2:Account1}'),",
+      "    new Account(Name = '${3:Account2}')",
+      "};"
+    ],
+    "description": "Create a list of Accounts"
+  },
+
+  "Apex: List of Contacts": {
+    "prefix": "conlist",
+    "body": [
+      "List<Contact> ${1:conList} = new List<Contact>{",
+      "    new Contact(FirstName = '${2:First}', LastName = '${3:Last}'),",
+      "    new Contact(FirstName = '${4:First}', LastName = '${5:Last}')",
+      "};"
+    ],
+    "description": "Create a list of Contacts"
+  },
+
+  "Apex: System Debug": {
+    "prefix": "dbg",
+    "body": [
+      "System.debug('${1:message}: ' + ${2:variable});"
+    ],
+    "description": "System.debug template"
+  },
+
+  "Apex: For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (${1:SObject} ${2:record} : ${3:records}) {",
+      "    ${4:// code}",
+      "}"
+    ],
+    "description": "For-each loop over a list"
+  },
+
+  "Apex: If Block": {
+    "prefix": "ifb",
+    "body": [
+      "if (${1:condition}) {",
+      "    ${2:// code}",
+      "}"
+    ],
+    "description": "If block"
+  },
+
+  "Apex: SOQL Query": {
+    "prefix": "soql",
+    "body": [
+      "List<${1:SObject}> ${2:records} = [",
+      "    SELECT ${3:Id, Name}",
+      "    FROM ${1:SObject}",
+      "    WHERE ${4:Condition}",
+      "    LIMIT ${5:10}",
+      "];"
+    ],
+    "description": "SOQL query template"
+  },
+
+  "Apex: Test Class Boilerplate": {
+    "prefix": "testclass",
+    "body": [
+      "@isTest",
+      "public Class ${1:MyTestClass} {",
+      "    private static final String ${2:myUserVar} = '${3:test.user@example.com}';",
+      "",
+      "    @testSetup",
+      "    public static void ${4:setupTestData}() {",
+      "        // Shared test data",
+      "        Account ${5:acc} = new Account(Name = '${6:Test Account}');",
+      "        insert ${5:acc};",
+      "",
+      "        Profile ${7:profile} = [SELECT Id FROM Profile WHERE Name = '${8:Standard User}' LIMIT 1];",
+      "        User ${9:testUser} = new User(",
+      "            ProfileId = ${7:profile}.Id,",
+      "            LastName = '${10:Tester}',",
+      "            Email = ${2:myUserVar},",
+      "            Username = ${2:myUserVar},",
+      "            Alias = '${11:tuser}',",
+      "        );",
+      "        insert ${9:testUser};",
+      "    }",
+      "",
+      "    @isTest",
+      "    public static void ${12:testMethodName}() {",
+      "        // Test user",
+      "        User ${13:testUser} = [SELECT Id FROM User WHERE Username = :${2:myUserVar} LIMIT 1];",
+      "",
+      "        System.runAs(${13:testUser}) {",
+      "            // Test data",
+      "            Account ${14:acc} = [SELECT Id, Name FROM Account WHERE Name = '${6:Test Account}' LIMIT 1].get(0);",
+      "",
+      "            Test.startTest();",
+      "",
+      "            // Code under test",
+      "            ${15:// call your method here}",
+      "",
+      "            Test.stopTest();",
+      "",
+      "            // Assertions",
+      "            Assert.isTrue(${16:condition}, '${17:Assertion message}');",
+      "        }",
+      "    }",
+      "}"
+    ],
+    "description": "Full Apex test class boilerplate with runAs, startTest, stopTest, and Assert class"
+  },
+
+  "Apex: Try Catch DML": {
+    "prefix": "trydml",
+    "body": [
+      "try {",
+      "    ${1:// DML statement}",
+      "} catch (DmlException ${2:e}) {",
+      "    System.debug('${3:DML error}: ' + ${2:e}.getMessage());",
+      "}"
+    ],
+    "description": "Try/catch block for DML operations"
+  },
+
+  "Apex: ApexDoc Class": {
+    "prefix": "apexdocclass",
+    "body": [
+      "/**",
+      " * @description ${1:Class purpose}",
+      " * @author ${2:Author Name}",
+      " * @date ${3:2026-02-13}",
+      " */"
+    ],
+    "description": "ApexDoc template for classes"
+  },
+
+  "Apex: ApexDoc Method": {
+    "prefix": "apexdocmethod",
+    "body": [
+      "/**",
+      " * @description ${1:Method purpose}",
+      " * @param ${2:paramName} ${3:Parameter description}",
+      " * @return ${4:Return value description}",
+      " */"
+    ],
+    "description": "ApexDoc template for methods"
+  },
+
+  "Apex: Test Method": {
+    "prefix": "testmethod",
+    "body": [
+      "@isTest",
+      "public static void ${1:testMethodName}() {",
+      "    // Test user",
+      "    User ${2:testUser} = [SELECT Id FROM User WHERE Username = :${3:myUserVar} LIMIT 1];",
+      "",
+      "    System.runAs(${2:testUser}) {",
+      "        // Test data",
+      "        Account ${4:acc} = [SELECT Id, Name FROM Account WHERE Name = '${5:Test Account}' LIMIT 1].get(0);",
+      "",
+      "        Test.startTest();",
+      "        ${6:// call code under test}",
+      "        Test.stopTest();",
+      "",
+      "        // Assertions",
+      "        Assert.isTrue(${7:condition}, '${8:Assertion message}');",
+      "    }",
+      "}"
+    ],
+    "description": "Standalone Apex test method template"
+  }
+}
