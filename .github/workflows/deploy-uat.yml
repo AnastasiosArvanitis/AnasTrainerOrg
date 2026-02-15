@@ -166,7 +166,7 @@ jobs:
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
-
+      
       # Step 8: Validate Jira credentials (non-blocking)
       - name: Validate Jira credentials
         if: always()
@@ -187,8 +187,14 @@ jobs:
             echo "This will not fail the deployment."
           fi
       
-      # Step 9: Send Deployment Status to Jira
-      - name: Send Deployment Status to Jira
+      # Step 9: Build Jira auth header
+      - name: Build Jira auth header
+        id: jira_auth
+        run: |
+          echo -n "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" | base64 > jira_auth.txt
+
+      # Step 10: Send Deployment Status to Jira
+      - name: Send Deployment Status to Jira (goood one)
         if: always()
         run: |
           echo "📤 Sending deployment status to Jira..."
@@ -275,13 +281,13 @@ jobs:
           echo "$PAYLOAD"
           
           # Send to Jira Deployments API
+          AUTH_HEADER=$(cat jira_auth.txt)
           set +e
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://api.atlassian.com/jira/deployments/0.1/cloud/${{ secrets.JIRA_CLOUD_ID }}/bulk" \
+            -H "Authorization: Basic $AUTH_HEADER" \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -u "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD" \
+            "https://api.atlassian.com/jira/deployments/0.1/bulk")
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
           set -e
