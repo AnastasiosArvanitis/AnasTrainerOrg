@@ -29,6 +29,14 @@ private class Test_Test {
     }
 
     @isTest
+    static void testIsEven() {
+        System.assertEquals(true, Test.isEven(4), '4 should be even');
+        System.assertEquals(false, Test.isEven(5), '5 should be odd');
+        System.assertEquals(true, Test.isEven(0), '0 should be even');
+        System.assertEquals(false, Test.isEven(null), 'null should not be even');
+    }
+
+    @isTest
     static void testIsEmpty() {
         // null and empty
         System.assertEquals(true, Test.isEmpty(null), 'null should be considered empty');
