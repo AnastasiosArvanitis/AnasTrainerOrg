@@ -166,8 +166,28 @@ jobs:
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
+
+      # Step 8: Validate Jira credentials (non-blocking)
+      - name: Validate Jira credentials
+        if: always()
+        run: |
+          echo "Validating Jira credentials..."
+          set +e
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
+            "https://api.atlassian.com/ex/jira/${{ secrets.JIRA_CLOUD_ID }}/rest/api/3/myself" \
+            -H "Accept: application/json" \
+            -u "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          set -e
+          echo "Jira auth check HTTP code: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Jira credentials look valid"
+          else
+            echo "⚠️  Jira credentials check failed (HTTP $HTTP_CODE)"
+            echo "This will not fail the deployment."
+          fi
       
-      # Step 8: Send Deployment Status to Jira
+      # Step 9: Send Deployment Status to Jira
       - name: Send Deployment Status to Jira
         if: always()
         run: |
