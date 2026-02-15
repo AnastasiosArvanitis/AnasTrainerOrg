@@ -166,3 +166,112 @@ jobs:
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
+      
+      # Step 8: Send Deployment Status to Jira
+      - name: Send Deployment Status to Jira
+        if: always()
+        run: |
+          echo "📤 Sending deployment status to Jira..."
+          
+          # Extract Jira issue keys from branch name and commit messages
+          JIRA_KEYS=""
+          
+          # Extract from branch name (e.g., SFDEVOPS-26_uat -> SFDEVOPS-26)
+          BRANCH_KEY=$(echo "${{ github.ref_name }}" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
+          if [ -n "$BRANCH_KEY" ]; then
+            JIRA_KEYS="$BRANCH_KEY"
+          fi
+          
+          # Extract from commit messages
+          COMMIT_KEYS=$(git log --format=%B -n 20 | grep -oE '[A-Z]+-[0-9]+' | sort -u || true)
+          for key in $COMMIT_KEYS; do
+            if [ -z "$JIRA_KEYS" ]; then
+              JIRA_KEYS="$key"
+            elif ! echo "$JIRA_KEYS" | grep -q "$key"; then
+              JIRA_KEYS="$JIRA_KEYS $key"
+            fi
+          done
+          
+          echo "Found Jira issue keys: $JIRA_KEYS"
+          
+          # Determine deployment state
+          if [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
+            DEPLOY_STATE="successful"
+          else
+            DEPLOY_STATE="failed"
+          fi
+          
+          # Build issue keys JSON array
+          if [ -z "$JIRA_KEYS" ]; then
+            echo "⚠️  No Jira issue keys found. Skipping Jira notification."
+            exit 0
+          fi
+          
+          ISSUE_KEYS_JSON="["
+          FIRST=true
+          for key in $JIRA_KEYS; do
+            if [ "$FIRST" = true ]; then
+              ISSUE_KEYS_JSON="${ISSUE_KEYS_JSON}\"${key}\""
+              FIRST=false
+            else
+              ISSUE_KEYS_JSON="${ISSUE_KEYS_JSON},\"${key}\""
+            fi
+          done
+          ISSUE_KEYS_JSON="${ISSUE_KEYS_JSON}]"
+          
+          # Current timestamp in ISO 8601 format
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Build JSON payload
+          PAYLOAD=$(cat <<EOF
+          {
+            "deployments": [
+              {
+                "deploymentSequenceNumber": ${{ github.run_number }},
+                "updateSequenceNumber": ${{ github.run_number }},
+                "issueKeys": ${ISSUE_KEYS_JSON},
+                "displayName": "UAT Deployment #${{ github.run_number }}",
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "description": "Deployment to UAT environment",
+                "lastUpdated": "${TIMESTAMP}",
+                "state": "${DEPLOY_STATE}",
+                "pipeline": {
+                  "id": "${{ github.workflow }}",
+                  "displayName": "${{ github.workflow }}",
+                  "url": "${{ github.server_url }}/${{ github.repository }}/actions"
+                },
+                "environment": {
+                  "id": "uat",
+                  "displayName": "UAT",
+                  "type": "testing"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          
+          echo "Payload:"
+          echo "$PAYLOAD"
+          
+          # Send to Jira Deployments API
+          set +e
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.atlassian.com/jira/deployments/0.1/cloud/${{ secrets.JIRA_CLOUD_ID }}/bulk" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -u "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -d "$PAYLOAD")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          set -e
+          
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $RESPONSE_BODY"
+          
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Successfully sent deployment status to Jira"
+          else
+            echo "⚠️  Failed to send deployment status to Jira (HTTP $HTTP_CODE)"
+            echo "This will not fail the deployment."
+          fi
