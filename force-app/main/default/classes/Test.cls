@@ -35,6 +35,18 @@ public with sharing class Test {
     public static Integer subtract(Integer a, Integer b) {
         return a - b;
     }
+
+    /**
+     * @description Check if a number is even
+     * @param value Number to check
+     * @return True if even, false otherwise
+     */
+    public static Boolean isEven(Integer value) {
+        if (value == null) {
+            return false;
+        }
+        return Math.mod(value, 2) == 0;
+    }
     
     /**
      * @description Simple method to check if a string is empty or null
