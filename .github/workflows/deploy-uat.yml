@@ -167,23 +167,25 @@ jobs:
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
       
-      # Step 8: Validate Jira credentials (non-blocking)
-      - name: Validate Jira credentials
+      # Step 8: Check Jira API connectivity (non-blocking)
+      - name: Check Jira API connectivity
         if: always()
         run: |
-          echo "Validating Jira credentials..."
+          echo "Checking connectivity to Jira Deployments API..."
           set +e
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
-            "https://api.atlassian.com/ex/jira/${{ secrets.JIRA_CLOUD_ID }}/rest/api/3/myself" \
-            -H "Accept: application/json" \
-            -u "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}")
+          RESPONSE=$(curl -sS -I -w "\n%{http_code}" \
+            --connect-timeout 15 \
+            --max-time 30 \
+            "https://api.atlassian.com/jira/deployments/0.1/bulk" 2>&1)
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           set -e
-          echo "Jira auth check HTTP code: $HTTP_CODE"
+          echo "Jira connectivity check HTTP code: $HTTP_CODE"
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Jira credentials look valid"
+            echo "✅ Jira endpoint is reachable"
           else
-            echo "⚠️  Jira credentials check failed (HTTP $HTTP_CODE)"
+            echo "⚠️  Jira endpoint check failed (HTTP $HTTP_CODE)"
+            echo "Details:"
+            echo "$RESPONSE"
             echo "This will not fail the deployment."
           fi
       
@@ -282,18 +284,35 @@ jobs:
           
           # Send to Jira Deployments API
           AUTH_HEADER=$(cat jira_auth.txt)
+          CURL_ERR_FILE=$(mktemp)
           set +e
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
+            --connect-timeout 20 \
+            --max-time 60 \
+            --retry 2 \
+            --retry-delay 2 \
             -H "Authorization: Basic $AUTH_HEADER" \
+            -H "Accept: application/json" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
-            "https://api.atlassian.com/jira/deployments/0.1/bulk")
+            "https://api.atlassian.com/jira/deployments/0.1/bulk" 2>"$CURL_ERR_FILE")
+          CURL_EXIT_CODE=$?
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
           set -e
           
+          if [ $CURL_EXIT_CODE -ne 0 ]; then
+            echo "⚠️  curl failed before getting an HTTP response (exit code: $CURL_EXIT_CODE)"
+            echo "curl error details:"
+            cat "$CURL_ERR_FILE"
+            echo "This will not fail the deployment."
+            rm -f "$CURL_ERR_FILE"
+            exit 0
+          fi
+
           echo "Response code: $HTTP_CODE"
           echo "Response body: $RESPONSE_BODY"
+          rm -f "$CURL_ERR_FILE"
           
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "✅ Successfully sent deployment status to Jira"
