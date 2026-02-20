@@ -204,7 +204,7 @@ jobs:
             echo "JIRA_CLOUD_ID format: invalid or empty"
           fi
 
-          if echo "${{ secrets.JIRA_BASE_URL }}" | grep -Eq '^https://[^/]+\.atlassian\.net$'; then
+          if echo "${{ secrets.JIRA_BASE_URL }}" | grep -Eq '^https://[^/]+\.atlassian\.net/?$'; then
             echo "JIRA_BASE_URL format: looks valid"
           else
             echo "JIRA_BASE_URL format: invalid or empty"
@@ -328,8 +328,9 @@ jobs:
           # Send to Jira Deployments API
           AUTH_HEADER=$(tr -d '\r\n' < jira_auth.txt)
           CURL_ERR_FILE=$(mktemp)
+          BASE_URL_CLEAN=$(echo "${{ secrets.JIRA_BASE_URL }}" | sed 's:/*$::')
           PRIMARY_URL="https://api.atlassian.com/jira/deployments/0.1/bulk"
-          FALLBACK_URL="${{ secrets.JIRA_BASE_URL }}/rest/deployments/0.1/bulk"
+          FALLBACK_URL="$BASE_URL_CLEAN/rest/deployments/0.1/bulk"
 
           echo "Primary Jira URL: $PRIMARY_URL"
           if [ -n "${{ secrets.JIRA_BASE_URL }}" ]; then
@@ -353,6 +354,28 @@ jobs:
           }
 
           set +e
+
+          # Verify Jira site credentials with same auth (safe, no secret output)
+          if [ -n "$BASE_URL_CLEAN" ]; then
+            SELF_RESPONSE=$(curl -sS -w "\n%{http_code}" -X GET \
+              --connect-timeout 15 \
+              --max-time 30 \
+              -H "Authorization: Basic $AUTH_HEADER" \
+              -H "Accept: application/json" \
+              "$BASE_URL_CLEAN/rest/api/3/myself" 2>"$CURL_ERR_FILE")
+            SELF_EXIT_CODE=$?
+            SELF_HTTP_CODE=$(echo "$SELF_RESPONSE" | tail -n1)
+            if [ $SELF_EXIT_CODE -eq 0 ] && [ "$SELF_HTTP_CODE" -ge 200 ] && [ "$SELF_HTTP_CODE" -lt 300 ]; then
+              echo "Jira site credential check: OK"
+            else
+              echo "⚠️  Jira site credential check failed (HTTP $SELF_HTTP_CODE, curl $SELF_EXIT_CODE)"
+              if [ -s "$CURL_ERR_FILE" ]; then
+                echo "Credential check curl details:"
+                cat "$CURL_ERR_FILE"
+              fi
+            fi
+          fi
+
           RESPONSE=$(send_request "$PRIMARY_URL")
           CURL_EXIT_CODE=$?
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
