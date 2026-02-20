@@ -285,20 +285,44 @@ jobs:
           # Send to Jira Deployments API
           AUTH_HEADER=$(tr -d '\r\n' < jira_auth.txt)
           CURL_ERR_FILE=$(mktemp)
+          PRIMARY_URL="https://api.atlassian.com/jira/deployments/0.1/bulk"
+          FALLBACK_URL="${{ secrets.JIRA_BASE_URL }}/rest/deployments/0.1/bulk"
+
+          echo "Primary Jira URL: $PRIMARY_URL"
+          if [ -n "${{ secrets.JIRA_BASE_URL }}" ]; then
+            echo "Fallback Jira URL is configured"
+          else
+            echo "Fallback Jira URL is not configured (set JIRA_BASE_URL secret like https://your-domain.atlassian.net)"
+          fi
+
+          send_request() {
+            local url="$1"
+            curl -sS -w "\n%{http_code}" -X POST \
+              --connect-timeout 20 \
+              --max-time 60 \
+              --retry 2 \
+              --retry-delay 2 \
+              -H "Authorization: Basic $AUTH_HEADER" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" \
+              "$url" 2>"$CURL_ERR_FILE"
+          }
+
           set +e
-          RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
-            --connect-timeout 20 \
-            --max-time 60 \
-            --retry 2 \
-            --retry-delay 2 \
-            -H "Authorization: Basic $AUTH_HEADER" \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            "https://api.atlassian.com/jira/deployments/0.1/bulk" 2>"$CURL_ERR_FILE")
+          RESPONSE=$(send_request "$PRIMARY_URL")
           CURL_EXIT_CODE=$?
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ $CURL_EXIT_CODE -eq 0 ] && [ "$HTTP_CODE" = "401" ] && [ -n "${{ secrets.JIRA_BASE_URL }}" ]; then
+            echo "Primary endpoint returned 401. Retrying against Jira site endpoint..."
+            RESPONSE=$(send_request "$FALLBACK_URL")
+            CURL_EXIT_CODE=$?
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          fi
+
           set -e
           
           if [ $CURL_EXIT_CODE -ne 0 ]; then
