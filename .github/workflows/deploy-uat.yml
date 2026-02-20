@@ -6,6 +6,7 @@ on:
 jobs:
   deploy-uat:
     runs-on: ubuntu-latest
+    environment: uat
     
     steps:
       # Step 1: Checkout the repository
@@ -166,8 +167,50 @@ jobs:
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
+
+      # Step 8: Debug Jira secrets availability (temporary, safe)
+      - name: Debug Jira secrets availability
+        if: always()
+        run: |
+          echo "Checking Jira secret availability (safe output only)..."
+
+          if [ -n "${{ secrets.JIRA_API_EMAIL }}" ]; then
+            echo "JIRA_API_EMAIL: SET"
+          else
+            echo "JIRA_API_EMAIL: MISSING"
+          fi
+
+          if [ -n "${{ secrets.JIRA_CLOUD_ID }}" ]; then
+            echo "JIRA_CLOUD_ID: SET"
+          else
+            echo "JIRA_CLOUD_ID: MISSING"
+          fi
+
+          if [ -n "${{ secrets.JIRA_BASE_URL }}" ]; then
+            echo "JIRA_BASE_URL: SET"
+          else
+            echo "JIRA_BASE_URL: MISSING"
+          fi
+
+          if echo "${{ secrets.JIRA_API_EMAIL }}" | grep -Eq '^[^@]+@[^@]+\.[^@]+$'; then
+            echo "JIRA_API_EMAIL format: looks valid"
+          else
+            echo "JIRA_API_EMAIL format: invalid or empty"
+          fi
+
+          if echo "${{ secrets.JIRA_CLOUD_ID }}" | grep -Eq '^[0-9a-fA-F-]{20,}$'; then
+            echo "JIRA_CLOUD_ID format: looks valid"
+          else
+            echo "JIRA_CLOUD_ID format: invalid or empty"
+          fi
+
+          if echo "${{ secrets.JIRA_BASE_URL }}" | grep -Eq '^https://[^/]+\.atlassian\.net$'; then
+            echo "JIRA_BASE_URL format: looks valid"
+          else
+            echo "JIRA_BASE_URL format: invalid or empty"
+          fi
       
-      # Step 8: Check Jira API connectivity (non-blocking)
+      # Step 9: Check Jira API connectivity (non-blocking)
       - name: Check Jira API connectivity
         if: always()
         run: |
@@ -189,13 +232,13 @@ jobs:
             echo "This will not fail the deployment."
           fi
       
-      # Step 9: Build Jira auth header
+      # Step 10: Build Jira auth header
       - name: Build Jira auth header
         id: jira_auth
         run: |
           printf '%s' "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" | base64 | tr -d '\n' > jira_auth.txt
 
-      # Step 10: Send Deployment Status to Jira
+      # Step 11: Send Deployment Status to Jira
       - name: Send Deployment Status to Jira (goood one)
         if: always()
         run: |
