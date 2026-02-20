@@ -193,7 +193,7 @@ jobs:
       - name: Build Jira auth header
         id: jira_auth
         run: |
-          echo -n "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" | base64 > jira_auth.txt
+          printf '%s' "${{ secrets.JIRA_API_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" | base64 | tr -d '\n' > jira_auth.txt
 
       # Step 10: Send Deployment Status to Jira
       - name: Send Deployment Status to Jira (goood one)
@@ -283,7 +283,7 @@ jobs:
           echo "$PAYLOAD"
           
           # Send to Jira Deployments API
-          AUTH_HEADER=$(cat jira_auth.txt)
+          AUTH_HEADER=$(tr -d '\r\n' < jira_auth.txt)
           CURL_ERR_FILE=$(mktemp)
           set +e
           RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
