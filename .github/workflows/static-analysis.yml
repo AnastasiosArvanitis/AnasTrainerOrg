@@ -1,0 +1,132 @@
+name: Static Code Analysis
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Java (required for PMD)
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      # Step 3: Install PMD
+      - name: Install PMD
+        run: |
+          echo "Installing PMD latest version..."
+          
+          # Get latest PMD version from GitHub releases
+          PMD_VERSION=$(curl -s https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/pmd_releases\///')
+          echo "Latest PMD version: $PMD_VERSION"
+          
+          # Download and extract PMD
+          wget -q "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+          unzip -q "pmd-dist-${PMD_VERSION}-bin.zip"
+          
+          # Add PMD to PATH
+          echo "$(pwd)/pmd-bin-${PMD_VERSION}/bin" >> $GITHUB_PATH
+          
+          echo "✅ PMD ${PMD_VERSION} installed successfully"
+      
+      # Step 4: Create report output directory
+      - name: Create report directory
+        run: |
+          mkdir -p pmd-report
+          echo "📁 Report directory created"
+      
+      # Step 5: Run PMD static analysis
+      - name: Run PMD analysis
+        id: pmd
+        run: |
+          echo "🔍 Running PMD static code analysis on force-app..."
+          
+          # Run PMD with both HTML and XML output formats
+          set +e
+          pmd check \
+            --dir force-app \
+            --rulesets category/apex/design.xml,category/apex/bestpractices.xml,category/apex/errorprone.xml,category/apex/performance.xml,category/apex/security.xml \
+            --format html \
+            --report-file pmd-report/pmd-report.html \
+            --no-cache
+          PMD_EXIT_CODE=$?
+          
+          pmd check \
+            --dir force-app \
+            --rulesets category/apex/design.xml,category/apex/bestpractices.xml,category/apex/errorprone.xml,category/apex/performance.xml,category/apex/security.xml \
+            --format xml \
+            --report-file pmd-report/pmd-report.xml \
+            --no-cache
+          set -e
+          
+          # Count violations
+          if [ -f pmd-report/pmd-report.xml ]; then
+            VIOLATION_COUNT=$(grep -c "<violation" pmd-report/pmd-report.xml || echo "0")
+          else
+            VIOLATION_COUNT="0"
+          fi
+          
+          echo "violations=$VIOLATION_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$VIOLATION_COUNT" -gt 0 ]; then
+            echo "⚠️  Found $VIOLATION_COUNT violation(s)"
+          else
+            echo "✅ No violations found"
+          fi
+          
+          echo "PMD analysis completed (exit code: $PMD_EXIT_CODE)"
+      
+      # Step 6: Upload PMD reports as artifacts
+      - name: Upload PMD reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmd-analysis-report
+          path: pmd-report/
+          retention-days: 30
+      
+      # Step 7: Add analysis summary
+      - name: Add analysis summary
+        if: always()
+        run: |
+          echo "## 🔍 Static Code Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Analysis Scope" >> $GITHUB_STEP_SUMMARY
+          echo "Analyzed all Apex code in \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### PMD Rulesets Applied" >> $GITHUB_STEP_SUMMARY
+          echo "- Design" >> $GITHUB_STEP_SUMMARY
+          echo "- Best Practices" >> $GITHUB_STEP_SUMMARY
+          echo "- Error Prone" >> $GITHUB_STEP_SUMMARY
+          echo "- Performance" >> $GITHUB_STEP_SUMMARY
+          echo "- Security" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          VIOLATION_COUNT="${{ steps.pmd.outputs.violations }}"
+          if [ "$VIOLATION_COUNT" -gt 0 ]; then
+            echo "### ⚠️  Violations Found: $VIOLATION_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ No Violations Found" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📥 Download Reports" >> $GITHUB_STEP_SUMMARY
+          echo "The PMD analysis reports are available as artifacts in this workflow run:" >> $GITHUB_STEP_SUMMARY
+          echo "- HTML Report: \`pmd-report/pmd-report.html\`" >> $GITHUB_STEP_SUMMARY
+          echo "- XML Report: \`pmd-report/pmd-report.xml\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Access the artifact from the workflow run summary page." >> $GITHUB_STEP_SUMMARY
