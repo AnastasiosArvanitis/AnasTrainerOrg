@@ -20,6 +20,23 @@ private class Test_Test {
     }
 
     @isTest
+    static void testSubtract() {
+        // basic subtraction
+        System.assertEquals(2, Test.subtract(5, 3), '5 - 3 should equal 2');
+        // negative and zero
+        System.assertEquals(-8, Test.subtract(-5, 3), '-5 - 3 should equal -8');
+        System.assertEquals(10, Test.subtract(10, 0), '10 - 0 should equal 10');
+    }
+
+    @isTest
+    static void testIsEven() {
+        System.assertEquals(true, Test.isEven(4), '4 should be even');
+        System.assertEquals(false, Test.isEven(5), '5 should be odd');
+        System.assertEquals(true, Test.isEven(0), '0 should be even');
+        System.assertEquals(false, Test.isEven(null), 'null should not be even');
+    }
+
+    @isTest
     static void testIsEmpty() {
         // null and empty
         System.assertEquals(true, Test.isEmpty(null), 'null should be considered empty');

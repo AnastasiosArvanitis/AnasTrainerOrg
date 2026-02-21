@@ -25,6 +25,28 @@ public with sharing class Test {
         return a * b;
         // great job
     }
+
+    /**
+     * @description Simple method to subtract two numbers
+     * @param a First number
+     * @param b Second number
+     * @return a minus b
+     */
+    public static Integer subtract(Integer a, Integer b) {
+        return a - b;
+    }
+
+    /**
+     * @description Check if a number is even
+     * @param value Number to check
+     * @return True if even, false otherwise
+     */
+    public static Boolean isEven(Integer value) {
+        if (value == null) {
+            return false;
+        }
+        return Math.mod(value, 2) == 0;
+    }
     
     /**
      * @description Simple method to check if a string is empty or null
