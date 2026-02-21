@@ -1,0 +1,231 @@
+name: Apex Code Coverage Report
+
+on:
+  workflow_dispatch:
+
+jobs:
+  code-coverage:
+    name: Generate Apex Code Coverage Report
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Node.js (required for Salesforce CLI)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      # Step 3: Install Salesforce CLI
+      - name: Install Salesforce CLI
+        run: |
+          echo "Installing Salesforce CLI..."
+          npm install --global @salesforce/cli
+          sf --version
+          echo "✅ Salesforce CLI installed successfully"
+      
+      # Step 4: Authenticate to Salesforce Production Org
+      - name: Authenticate to Salesforce Prod Org
+        env:
+          SF_PROD_JWT_KEY: ${{ secrets.SF_PROD_JWT_KEY }}
+          SF_PROD_CLIENT_ID: ${{ secrets.SF_PROD_CLIENT_ID }}
+          SF_PROD_USERNAME: ${{ secrets.SF_PROD_USERNAME }}
+          SF_PROD_INSTANCE_URL: ${{ secrets.SF_PROD_INSTANCE_URL }}
+        run: |
+          echo "🔐 Authenticating to Salesforce production org..."
+          
+          # Create JWT key file from secret
+          echo "$SF_PROD_JWT_KEY" > jwt-key.txt
+          
+          # Authenticate using JWT flow
+          sf org login jwt \
+            --client-id "$SF_PROD_CLIENT_ID" \
+            --jwt-key-file jwt-key.txt \
+            --username "$SF_PROD_USERNAME" \
+            --instance-url "$SF_PROD_INSTANCE_URL" \
+            --alias prod \
+            --set-default
+          
+          # Clean up sensitive file
+          rm jwt-key.txt
+          
+          echo "✅ Successfully authenticated to production org"
+      
+      # Step 5: Create coverage report directory
+      - name: Create coverage report directory
+        run: |
+          mkdir -p coverage-report
+          echo "📁 Coverage report directory created"
+      
+      # Step 6: Execute all Apex unit tests
+      - name: Run all Apex unit tests
+        id: tests
+        run: |
+          echo "🧪 Executing all Apex unit tests..."
+          
+          set +e
+          
+          # Run tests and capture results in JSON format
+          sf apex run test \
+            --target-org prod \
+            --wait 30 \
+            --result-format json \
+            --output-dir coverage-report \
+            --code-coverage
+          
+          TEST_EXIT_CODE=$?
+          
+          set -e
+          
+          echo "Test execution exit code: $TEST_EXIT_CODE"
+          
+          # Store exit code for later use
+          echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+      
+      # Step 7: Generate JSON coverage report
+      - name: Generate JSON coverage report
+        if: always()
+        id: coverage-json
+        run: |
+          echo "📊 Processing test results and coverage data..."
+          
+          # Check if test results exist
+          if [ -f coverage-report/test-result-*.json ]; then
+            # Rename for consistency
+            mv coverage-report/test-result-*.json coverage-report/test-results.json
+            
+            # Extract coverage metrics using jq
+            if command -v jq &> /dev/null; then
+              jq '.' coverage-report/test-results.json > coverage-report/coverage-metrics.json
+              
+              # Extract key metrics
+              TOTAL_TESTS=$(jq '.result.totalTestsRun' coverage-report/test-results.json 2>/dev/null || echo "0")
+              TESTS_PASSED=$(jq '.result.numTestsCompleted' coverage-report/test-results.json 2>/dev/null || echo "0")
+              TESTS_FAILED=$(jq '.result.numFailures' coverage-report/test-results.json 2>/dev/null || echo "0")
+              CODE_COVERAGE=$(jq '.result.orgWideCoverage.percentage' coverage-report/test-results.json 2>/dev/null || echo "0")
+              
+              echo "tests_total=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+              echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
+              echo "tests_failed=$TESTS_FAILED" >> $GITHUB_OUTPUT
+              echo "coverage_pct=$CODE_COVERAGE" >> $GITHUB_OUTPUT
+            else
+              echo "tests_total=Unknown" >> $GITHUB_OUTPUT
+              echo "tests_passed=Unknown" >> $GITHUB_OUTPUT
+              echo "tests_failed=Unknown" >> $GITHUB_OUTPUT
+              echo "coverage_pct=Unknown" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "⚠️  No test results JSON file found"
+            echo "tests_total=0" >> $GITHUB_OUTPUT
+            echo "tests_passed=0" >> $GITHUB_OUTPUT
+            echo "tests_failed=0" >> $GITHUB_OUTPUT
+            echo "coverage_pct=0" >> $GITHUB_OUTPUT
+          fi
+      
+      # Step 8: Generate Markdown coverage summary
+      - name: Generate Markdown coverage summary
+        if: always()
+        run: |
+          echo "📝 Creating Markdown coverage report..."
+          
+          cat > coverage-report/COVERAGE_SUMMARY.md <<'EOF'
+          # Apex Code Coverage Report
+          
+          ## Executive Summary
+          Generated from production org on ${{ github.ref_name }} branch  
+          Run ID: ${{ github.run_id }}  
+          Workflow Triggered: ${{ github.event_name }} by ${{ github.actor }}
+          
+          ---
+          
+          ## Test Execution Results
+          
+          | Metric | Value |
+          |--------|-------|
+          | **Total Tests Executed** | ${{ steps.coverage-json.outputs.tests_total }} |
+          | **Tests Passed** | ${{ steps.coverage-json.outputs.tests_passed }} |
+          | **Tests Failed** | ${{ steps.coverage-json.outputs.tests_failed }} |
+          | **Overall Code Coverage** | ${{ steps.coverage-json.outputs.coverage_pct }}% |
+          
+          ---
+          
+          ## Test Status
+          
+          ${{ steps.tests.outputs.exit_code == '0' && '✅ **All tests passed successfully**' || '⚠️  **Some tests failed - review details below**' }}
+          
+          ---
+          
+          ## Files Generated
+          
+          - `test-results.json` - Raw test execution results
+          - `coverage-metrics.json` - Structured coverage metrics
+          - `COVERAGE_SUMMARY.md` - This summary report
+          
+          ## Next Steps
+          
+          1. Review the raw JSON reports for detailed test failures
+          2. Check coverage gaps in low-coverage classes
+          3. Address failed tests before next deployment
+          
+          ---
+          
+          Generated at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          
+          cat coverage-report/COVERAGE_SUMMARY.md
+      
+      # Step 9: Upload coverage reports as artifacts
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-code-coverage-report
+          path: coverage-report/
+          retention-days: 30
+      
+      # Step 10: Add summary to GitHub Actions output
+      - name: Add summary to workflow run
+        if: always()
+        run: |
+          echo "# 📊 Apex Code Coverage Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "| Metric | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Tests | ${{ steps.coverage-json.outputs.tests_total }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | ${{ steps.coverage-json.outputs.tests_passed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | ${{ steps.coverage-json.outputs.tests_failed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Code Coverage** | **${{ steps.coverage-json.outputs.coverage_pct }}%** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.tests.outputs.exit_code }}" == "0" ]; then
+            echo "## ✅ Status: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️  Status: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📥 Artifact Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The complete coverage report has been uploaded as an artifact:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact Name:** `apex-code-coverage-report`" >> $GITHUB_STEP_SUMMARY
+          echo "**Retention Period:** 30 days" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Included Files:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 `test-results.json` - Raw test execution results" >> $GITHUB_STEP_SUMMARY
+          echo "- 📈 `coverage-metrics.json` - Structured coverage metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 `COVERAGE_SUMMARY.md` - Human-readable summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Branch & Commit" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run:** [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
