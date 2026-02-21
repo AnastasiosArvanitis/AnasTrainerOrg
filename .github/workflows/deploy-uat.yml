@@ -6,6 +6,7 @@ on:
 jobs:
   deploy-uat:
     runs-on: ubuntu-latest
+    environment: uat
     
     steps:
       # Step 1: Checkout the repository
