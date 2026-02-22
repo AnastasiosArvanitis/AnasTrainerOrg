@@ -8,7 +8,7 @@ jobs:
     # Ensure deployments run only from the main branch
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
-    environment: main
+    environment: Production
     
     steps:
       # Step 1: Checkout the repository
