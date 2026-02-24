@@ -1,10 +1,9 @@
 /**
- * @description Test class containing simple utility methods for mathematical operations and string validation
+ * @description Provides simple arithmetic operations: addition, multiplication, and subtraction.
  * @author Anastasios Arvanitis
- * @date January 2026
+ * @date February 2026
  */
-public with sharing class Test {
-    
+public with sharing class Calculator {
     /**
      * @description Simple method to add two numbers
      * @param a First number
@@ -34,26 +33,5 @@ public with sharing class Test {
      */
     public static Integer subtract(Integer a, Integer b) {
         return a - b;
-    }
-    
-    /**
-     * @description Simple method to check if a string is empty or null
-     * @param str String to check
-     * @return True if string is empty or null, false otherwise
-     */
-    public static Boolean isEmpty(String str) {
-        return String.isBlank(str);
-    }
-    
-    /**
-     * @description Get greeting message for a given name
-     * @param name Person's name
-     * @return Greeting message
-     */
-    public static String greet(String name) {
-        if (String.isBlank(name)) {
-            return 'Hello, Guest!';
-        }
-        return 'Hello, ' + name + '!';
     }
 }
