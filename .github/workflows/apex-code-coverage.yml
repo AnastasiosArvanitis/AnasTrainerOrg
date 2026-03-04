@@ -36,21 +36,32 @@ jobs:
           SF_PROD_INSTANCE_URL: ${{ secrets.SF_PROD_INSTANCE_URL }}
         run: |
           echo "🔐 Authenticating to Salesforce production org..."
+
+          if [ -z "$SF_PROD_JWT_KEY" ] || [ -z "$SF_PROD_CLIENT_ID" ] || [ -z "$SF_PROD_USERNAME" ] || [ -z "$SF_PROD_INSTANCE_URL" ]; then
+            echo "❌ Missing one or more required Salesforce secrets"
+            exit 1
+          fi
+
+          INSTANCE_URL="$SF_PROD_INSTANCE_URL"
+          if [[ "$INSTANCE_URL" != http://* && "$INSTANCE_URL" != https://* ]]; then
+            INSTANCE_URL="https://$INSTANCE_URL"
+          fi
           
-          # Create JWT key file from secret
-          echo "$SF_PROD_JWT_KEY" > jwt-key.txt
+          # Create a secure temporary file for JWT key
+          KEY_FILE=$(mktemp)
+          printf '%s' "$SF_PROD_JWT_KEY" > "$KEY_FILE"
           
           # Authenticate using JWT flow
           sf org login jwt \
             --client-id "$SF_PROD_CLIENT_ID" \
-            --jwt-key-file jwt-key.txt \
+            --jwt-key-file "$KEY_FILE" \
             --username "$SF_PROD_USERNAME" \
-            --instance-url "$SF_PROD_INSTANCE_URL" \
+            --instance-url "$INSTANCE_URL" \
             --alias prod \
             --set-default
           
           # Clean up sensitive file
-          rm jwt-key.txt
+          rm -f "$KEY_FILE"
           
           echo "✅ Successfully authenticated to production org"
       
@@ -92,10 +103,20 @@ jobs:
         run: |
           echo "📊 Processing test results and coverage data..."
           
+          # Resolve test result files safely
+          shopt -s nullglob
+          RESULT_FILES=(coverage-report/test-result-*.json)
+          shopt -u nullglob
+
           # Check if test results exist
-          if [ -f coverage-report/test-result-*.json ]; then
-            # Rename for consistency
-            mv coverage-report/test-result-*.json coverage-report/test-results.json
+          if [ ${#RESULT_FILES[@]} -gt 0 ]; then
+            if [ ${#RESULT_FILES[@]} -gt 1 ]; then
+              echo "⚠️  Multiple test result files found (${#RESULT_FILES[@]}). Using the newest one."
+            fi
+
+            # Pick newest file for consistency
+            LATEST_RESULT_FILE=$(ls -1t coverage-report/test-result-*.json | head -n 1)
+            mv "$LATEST_RESULT_FILE" coverage-report/test-results.json
             
             # Extract coverage metrics using jq
             if command -v jq &> /dev/null; then
