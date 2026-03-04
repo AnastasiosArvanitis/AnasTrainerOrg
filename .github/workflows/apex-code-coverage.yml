@@ -106,21 +106,61 @@ jobs:
         id: coverage-json
         run: |
           echo "📊 Processing test results and coverage data..."
+
+          # Preferred path: use test run id to fetch canonical test results JSON
+          if [ -f coverage-report/test-run-id.txt ] && [ -s coverage-report/test-run-id.txt ]; then
+            TEST_RUN_ID=$(tr -d '[:space:]' < coverage-report/test-run-id.txt)
+            echo "Found test run id: $TEST_RUN_ID"
+
+            if [ -n "$TEST_RUN_ID" ]; then
+              set +e
+              sf apex get test \
+                --target-org prod \
+                --test-run-id "$TEST_RUN_ID" \
+                --result-format json \
+                --code-coverage > coverage-report/test-results.json
+              GET_TEST_EXIT_CODE=$?
+              set -e
+
+              if [ $GET_TEST_EXIT_CODE -ne 0 ]; then
+                echo "⚠️  Failed to fetch test results via test-run-id. Falling back to generated JSON files."
+                rm -f coverage-report/test-results.json
+              fi
+            fi
+          fi
           
           # Resolve test result files safely
           shopt -s nullglob
           RESULT_FILES=(coverage-report/test-result-*.json)
           shopt -u nullglob
 
-          # Check if test results exist
-          if [ ${#RESULT_FILES[@]} -gt 0 ]; then
+          # If canonical file was not generated, select from CLI output files
+          if [ ! -f coverage-report/test-results.json ] && [ ${#RESULT_FILES[@]} -gt 0 ]; then
             if [ ${#RESULT_FILES[@]} -gt 1 ]; then
-              echo "⚠️  Multiple test result files found (${#RESULT_FILES[@]}). Using the newest one."
+              echo "⚠️  Multiple test result files found (${#RESULT_FILES[@]}). Selecting the one with test summary metrics."
             fi
 
-            # Pick newest file for consistency
-            LATEST_RESULT_FILE=$(ls -1t coverage-report/test-result-*.json | head -n 1)
-            mv "$LATEST_RESULT_FILE" coverage-report/test-results.json
+            # Prefer the newest JSON that contains test run summary
+            SELECTED_RESULT_FILE=""
+            for candidate in $(ls -1t coverage-report/test-result-*.json); do
+              if jq -e '.result.summary.testsRan // .result.totalTestsRun' "$candidate" > /dev/null 2>&1; then
+                SELECTED_RESULT_FILE="$candidate"
+                break
+              fi
+            done
+
+            # Fallback if schema check doesn't match
+            if [ -z "$SELECTED_RESULT_FILE" ]; then
+              echo "⚠️  Could not detect summary schema; falling back to newest JSON file."
+              SELECTED_RESULT_FILE=$(ls -1t coverage-report/test-result-*.json | head -n 1)
+            fi
+
+            echo "Using test result file: $SELECTED_RESULT_FILE"
+            mv "$SELECTED_RESULT_FILE" coverage-report/test-results.json
+          fi
+
+          # Check if test results exist
+          if [ -f coverage-report/test-results.json ]; then
             
             # Extract coverage metrics using jq
             if command -v jq &> /dev/null; then
@@ -130,7 +170,8 @@ jobs:
               TOTAL_TESTS=$(jq -r '.result.summary.testsRan // .result.totalTestsRun // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
               TESTS_PASSED=$(jq -r '.result.summary.passing // .result.numTestsCompleted // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
               TESTS_FAILED=$(jq -r '.result.summary.failing // .result.numFailures // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
-              CODE_COVERAGE=$(jq -r '.result.summary.orgWideCoverage // .result.orgWideCoverage.percentage // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
+              CODE_COVERAGE_RAW=$(jq -r '.result.summary.orgWideCoverage // .result.orgWideCoverage.percentage // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
+              CODE_COVERAGE="${CODE_COVERAGE_RAW%%%}"
               
               echo "tests_total=$TOTAL_TESTS" >> $GITHUB_OUTPUT
               echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
