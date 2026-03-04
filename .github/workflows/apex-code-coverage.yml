@@ -240,6 +240,28 @@ jobs:
           
           Generated at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
+
+          if [ -f coverage-report/test-results.json ] && command -v jq &> /dev/null; then
+            echo "" >> coverage-report/COVERAGE_SUMMARY.md
+            echo "## Passed Tests" >> coverage-report/COVERAGE_SUMMARY.md
+
+            PASSED_TESTS=$(jq -r '.result.tests[]? | select((.Outcome // "") | ascii_downcase == "pass") | (.FullName // (.ApexClass.Name + "." + .MethodName))' coverage-report/test-results.json)
+            if [ -n "$PASSED_TESTS" ]; then
+              echo "$PASSED_TESTS" | sed 's/^/- /' >> coverage-report/COVERAGE_SUMMARY.md
+            else
+              echo "- None" >> coverage-report/COVERAGE_SUMMARY.md
+            fi
+
+            echo "" >> coverage-report/COVERAGE_SUMMARY.md
+            echo "## Failed Tests" >> coverage-report/COVERAGE_SUMMARY.md
+
+            FAILED_TESTS=$(jq -r '.result.tests[]? | select((.Outcome // "") | ascii_downcase == "fail") | (.FullName // (.ApexClass.Name + "." + .MethodName))' coverage-report/test-results.json)
+            if [ -n "$FAILED_TESTS" ]; then
+              echo "$FAILED_TESTS" | sed 's/^/- /' >> coverage-report/COVERAGE_SUMMARY.md
+            else
+              echo "- None" >> coverage-report/COVERAGE_SUMMARY.md
+            fi
+          fi
           
           cat coverage-report/COVERAGE_SUMMARY.md
       
@@ -297,3 +319,25 @@ jobs:
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Run:** [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f coverage-report/test-results.json ] && command -v jq &> /dev/null; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ Passed Tests" >> $GITHUB_STEP_SUMMARY
+
+            PASSED_TESTS=$(jq -r '.result.tests[]? | select((.Outcome // "") | ascii_downcase == "pass") | (.FullName // (.ApexClass.Name + "." + .MethodName))' coverage-report/test-results.json)
+            if [ -n "$PASSED_TESTS" ]; then
+              echo "$PASSED_TESTS" | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- None" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ Failed Tests" >> $GITHUB_STEP_SUMMARY
+
+            FAILED_TESTS=$(jq -r '.result.tests[]? | select((.Outcome // "") | ascii_downcase == "fail") | (.FullName // (.ApexClass.Name + "." + .MethodName))' coverage-report/test-results.json)
+            if [ -n "$FAILED_TESTS" ]; then
+              echo "$FAILED_TESTS" | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- None" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
