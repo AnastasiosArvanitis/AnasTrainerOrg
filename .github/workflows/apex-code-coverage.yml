@@ -82,6 +82,7 @@ jobs:
           # Run tests and capture results in JSON format
           sf apex run test \
             --target-org prod \
+            --test-level RunLocalTests \
             --wait 30 \
             --result-format json \
             --output-dir coverage-report \
@@ -95,6 +96,9 @@ jobs:
           
           # Store exit code for later use
           echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+
+          echo "Generated files in coverage-report:"
+          ls -la coverage-report || true
       
       # Step 7: Generate JSON coverage report
       - name: Generate JSON coverage report
@@ -123,10 +127,10 @@ jobs:
               jq '.' coverage-report/test-results.json > coverage-report/coverage-metrics.json
               
               # Extract key metrics
-              TOTAL_TESTS=$(jq '.result.totalTestsRun' coverage-report/test-results.json 2>/dev/null || echo "0")
-              TESTS_PASSED=$(jq '.result.numTestsCompleted' coverage-report/test-results.json 2>/dev/null || echo "0")
-              TESTS_FAILED=$(jq '.result.numFailures' coverage-report/test-results.json 2>/dev/null || echo "0")
-              CODE_COVERAGE=$(jq '.result.orgWideCoverage.percentage' coverage-report/test-results.json 2>/dev/null || echo "0")
+              TOTAL_TESTS=$(jq -r '.result.summary.testsRan // .result.totalTestsRun // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
+              TESTS_PASSED=$(jq -r '.result.summary.passing // .result.numTestsCompleted // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
+              TESTS_FAILED=$(jq -r '.result.summary.failing // .result.numFailures // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
+              CODE_COVERAGE=$(jq -r '.result.summary.orgWideCoverage // .result.orgWideCoverage.percentage // 0' coverage-report/test-results.json 2>/dev/null || echo "0")
               
               echo "tests_total=$TOTAL_TESTS" >> $GITHUB_OUTPUT
               echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
@@ -175,7 +179,7 @@ jobs:
           
           ## Test Status
           
-          ${{ steps.tests.outputs.exit_code == '0' && '✅ **All tests passed successfully**' || '⚠️  **Some tests failed - review details below**' }}
+          ${{ steps.coverage-json.outputs.tests_total == '0' && '⚠️  **No tests were executed - check org test classes and test selection**' || steps.tests.outputs.exit_code == '0' && '✅ **All tests passed successfully**' || '⚠️  **Some tests failed - review details below**' }}
           
           ---
           
@@ -225,7 +229,9 @@ jobs:
           echo "| **Code Coverage** | **${{ steps.coverage-json.outputs.coverage_pct }}%** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ steps.tests.outputs.exit_code }}" == "0" ]; then
+          if [ "${{ steps.coverage-json.outputs.tests_total }}" == "0" ]; then
+            echo "## ⚠️  Status: NO TESTS EXECUTED" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.tests.outputs.exit_code }}" == "0" ]; then
             echo "## ✅ Status: PASSED" >> $GITHUB_STEP_SUMMARY
           else
             echo "## ⚠️  Status: FAILED" >> $GITHUB_STEP_SUMMARY
