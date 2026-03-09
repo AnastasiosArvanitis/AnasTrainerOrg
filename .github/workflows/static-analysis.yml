@@ -49,21 +49,23 @@ jobs:
         run: |
           echo "🔍 Running PMD static code analysis on force-app..."
           
-          # Run PMD with both HTML and XML output formats
+          # Run PMD with both HTML and XML output formats using the custom ruleset
           set +e
           pmd check \
             --dir force-app \
-            --rulesets category/apex/design.xml,category/apex/bestpractices.xml,category/apex/errorprone.xml,category/apex/performance.xml,category/apex/security.xml \
+            --rulesets .pmd/pmd-ruleset.xml \
             --format html \
             --report-file pmd-report/pmd-report.html \
+            --minimum-priority 2 \
             --no-cache
           PMD_EXIT_CODE=$?
           
           pmd check \
             --dir force-app \
-            --rulesets category/apex/design.xml,category/apex/bestpractices.xml,category/apex/errorprone.xml,category/apex/performance.xml,category/apex/security.xml \
+            --rulesets .pmd/pmd-ruleset.xml \
             --format xml \
             --report-file pmd-report/pmd-report.xml \
+            --minimum-priority 2 \
             --no-cache
           set -e
           
@@ -93,40 +95,89 @@ jobs:
           path: pmd-report/
           retention-days: 30
       
-      # Step 7: Add analysis summary
+      # Step 7: Add analysis summary with violations table
       - name: Add analysis summary
         if: always()
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          echo "## 🔍 Static Code Analysis Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### Analysis Scope" >> $GITHUB_STEP_SUMMARY
-          echo "Analyzed all Apex code in \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### PMD Rulesets Applied" >> $GITHUB_STEP_SUMMARY
-          echo "- Design" >> $GITHUB_STEP_SUMMARY
-          echo "- Best Practices" >> $GITHUB_STEP_SUMMARY
-          echo "- Error Prone" >> $GITHUB_STEP_SUMMARY
-          echo "- Performance" >> $GITHUB_STEP_SUMMARY
-          echo "- Security" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          VIOLATION_COUNT="${{ steps.pmd.outputs.violations }}"
-          if [ "$VIOLATION_COUNT" -gt 0 ]; then
-            echo "### ⚠️  Violations Found: $VIOLATION_COUNT" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ✅ No Violations Found" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### 📥 Download Reports" >> $GITHUB_STEP_SUMMARY
-          echo "The PMD analysis reports are available as artifacts in this workflow run:" >> $GITHUB_STEP_SUMMARY
-          echo "- HTML Report: \`pmd-report/pmd-report.html\`" >> $GITHUB_STEP_SUMMARY
-          echo "- XML Report: \`pmd-report/pmd-report.xml\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Access the artifact from the workflow run summary page." >> $GITHUB_STEP_SUMMARY
+          python3 << 'PYEOF'
+          import xml.etree.ElementTree as ET
+          import os
+
+          branch_name = os.environ.get('BRANCH_NAME', 'unknown')
+          commit_sha = os.environ.get('COMMIT_SHA', 'unknown')
+          report_path = 'pmd-report/pmd-report.xml'
+          summary_file = os.environ['GITHUB_STEP_SUMMARY']
+          workspace = os.environ.get('GITHUB_WORKSPACE', os.getcwd())
+
+          def escape_md(text):
+              return (text.replace('\\', '\\\\')
+                          .replace('|', '\\|')
+                          .replace('`', '\\`')
+                          .replace('*', '\\*')
+                          .replace('\n', ' ')
+                          .replace('\r', ''))
+
+          p1_violations = []
+          p2_violations = []
+
+          if os.path.exists(report_path):
+              tree = ET.parse(report_path)
+              root = tree.getroot()
+              for file_elem in root.findall('file'):
+                  filename = file_elem.get('name', '')
+                  try:
+                      short_name = os.path.relpath(filename, workspace)
+                  except ValueError:
+                      short_name = filename
+                  for violation in file_elem.findall('violation'):
+                      line = violation.get('beginline', '')
+                      rule = violation.get('rule', '')
+                      priority = violation.get('priority', '')
+                      entry = {'file': short_name, 'line': line, 'rule': rule, 'priority': priority}
+                      if priority == '1':
+                          p1_violations.append(entry)
+                      elif priority == '2':
+                          p2_violations.append(entry)
+
+          total = len(p1_violations) + len(p2_violations)
+
+          with open(summary_file, 'a') as f:
+              f.write('## 🔍 Static Code Analysis Summary\n\n')
+              f.write(f'**Branch:** {branch_name}\n')
+              f.write(f'**Commit:** {commit_sha}\n')
+              f.write('**Triggered by:** Manual workflow dispatch\n\n')
+              f.write('### Analysis Scope\n')
+              f.write('Analyzed all Apex code in `force-app/` directory using `.pmd/pmd-ruleset.xml`\n\n')
+
+              if total == 0:
+                  f.write('### ✅ No Violations Found\n\n')
+              else:
+                  f.write(f'### ⚠️ Violations Found: {total} (Priority 1: {len(p1_violations)}, Priority 2: {len(p2_violations)})\n\n')
+
+                  if p1_violations:
+                      f.write('> ⛔ **The following violations will block a potential deployment.**\n\n')
+                      f.write('#### 🔴 Priority 1 Violations\n\n')
+                      f.write('| File | Line | Violation | Priority |\n')
+                      f.write('|------|------|-----------|----------|\n')
+                      for v in p1_violations:
+                          f.write(f"| `{escape_md(v['file'])}` | {v['line']} | {escape_md(v['rule'])} | {v['priority']} |\n")
+                      f.write('\n')
+
+                  if p2_violations:
+                      f.write('> ⚠️ **Warning: The following priority 2 violations should be reviewed and addressed.**\n\n')
+                      f.write('#### 🟡 Priority 2 Violations\n\n')
+                      f.write('| File | Line | Violation | Priority |\n')
+                      f.write('|------|------|-----------|----------|\n')
+                      for v in p2_violations:
+                          f.write(f"| `{escape_md(v['file'])}` | {v['line']} | {escape_md(v['rule'])} | {v['priority']} |\n")
+                      f.write('\n')
+
+                  f.write('### 📥 Download Reports\n')
+                  f.write('The PMD analysis reports are available as artifacts in this workflow run:\n')
+                  f.write('- HTML Report: `pmd-report/pmd-report.html`\n')
+                  f.write('- XML Report: `pmd-report/pmd-report.xml`\n\n')
+                  f.write('Access the artifact from the workflow run summary page.\n')
+          PYEOF
