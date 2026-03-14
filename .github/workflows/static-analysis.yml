@@ -107,8 +107,11 @@ jobs:
           p2_violations = []
 
           if os.path.exists(xml_path):
-              tree = ET.parse(xml_path)
-              root = tree.getroot()
+              # Strip XML namespace so findall() works regardless of PMD version
+              import re
+              with open(xml_path, 'r', encoding='utf-8') as xf:
+                  xml_content = re.sub(r'\sxmlns[^"]*"[^"]*"', '', xf.read())
+              root = ET.fromstring(xml_content)
               for file_elem in root.findall('file'):
                   file_name = os.path.basename(file_elem.get('name', ''))
                   for violation in file_elem.findall('violation'):
