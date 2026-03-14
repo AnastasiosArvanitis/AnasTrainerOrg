@@ -158,7 +158,7 @@ jobs:
                   f.write(f'### ⚠️ Violations Found: {total} (Priority 1: {len(p1_violations)}, Priority 2: {len(p2_violations)})\n\n')
 
                   if p1_violations:
-                      f.write('> ⛔ **The following violations will block a potential deployment.**\n\n')
+                      f.write('❌ Priority 1 violations detected. These violations block deployment.\n\n')
                       f.write('#### 🔴 Priority 1 Violations\n\n')
                       f.write('| File | Line | Violation | Priority |\n')
                       f.write('|------|------|-----------|----------|\n')
@@ -167,7 +167,7 @@ jobs:
                       f.write('\n')
 
                   if p2_violations:
-                      f.write('> ⚠️ **Warning: The following priority 2 violations should be reviewed and addressed.**\n\n')
+                      f.write('⚠️ Priority 2 violations detected. These violations should be reviewed.\n\n')
                       f.write('#### 🟡 Priority 2 Violations\n\n')
                       f.write('| File | Line | Violation | Priority |\n')
                       f.write('|------|------|-----------|----------|\n')
