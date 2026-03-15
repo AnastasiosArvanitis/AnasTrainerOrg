@@ -25,4 +25,35 @@ public with sharing class Utility {
         }
         return 'Hello, ' + name + '!';
     }
+
+    // --- PMD TEST VIOLATIONS ---
+
+    // PRIORITY 1: EmptyCatchBlock
+    public static void riskyOperation() {
+        try {
+            Integer x = 1 / 0;
+        } catch (Exception e) {
+            // empty catch block - intentional PMD violation (P1: EmptyCatchBlock)
+        }
+    }
+
+    // PRIORITY 1: EmptyIfStmt
+    public static void checkValue(Integer val) {
+        if (val > 0) {
+            // empty if body - intentional PMD violation (P1: EmptyIfStmt)
+        }
+    }
+
+    // PRIORITY 1: ApexDoc - method missing @description
+    public static String noDocMethod(String input) {
+        return input;
+    }
+
+    // PRIORITY 2: DebugsShouldUseLoggingLevel + UnusedLocalVariable + IfStmtsMustUseBraces
+    public static void debugExample(String msg) {
+        String unusedVar = 'I am never used'; // P2: UnusedLocalVariable
+        System.debug(msg);                    // P2: DebugsShouldUseLoggingLevel
+        if (msg != null)                      // P2: IfStmtsMustUseBraces
+            System.debug(msg);
+    }
 }
