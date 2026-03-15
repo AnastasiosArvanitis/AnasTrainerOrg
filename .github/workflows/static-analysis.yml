@@ -97,68 +97,82 @@ jobs:
       - name: Add analysis summary
         if: always()
         run: |
-          python3 << 'PYEOF'
-          import xml.etree.ElementTree as ET
-          import os
+          XML_PATH="pmd-report/pmd-report.xml"
+          VIOLATIONS_FILE=$(mktemp)
 
-          summary_file = os.environ['GITHUB_STEP_SUMMARY']
-          xml_path = 'pmd-report/pmd-report.xml'
-          p1_violations = []
-          p2_violations = []
+          # Parse violations from XML using awk: output file|line|rule|priority per violation
+          if [ -f "$XML_PATH" ]; then
+            awk '
+              /<file / {
+                match($0, /name="([^"]*)"/, arr)
+                n = split(arr[1], parts, "/")
+                current_file = parts[n]
+              }
+              /<violation / {
+                match($0, /beginline="([^"]*)"/, l)
+                match($0, /rule="([^"]*)"/, r)
+                match($0, /priority="([^"]*)"/, p)
+                print current_file "|" l[1] "|" r[1] "|" p[1]
+              }
+            ' "$XML_PATH" > "$VIOLATIONS_FILE"
+          fi
 
-          if os.path.exists(xml_path):
-              # Strip XML namespace so findall() works regardless of PMD version
-              import re
-              with open(xml_path, 'r', encoding='utf-8') as xf:
-                  xml_content = re.sub(r'\sxmlns[^"]*"[^"]*"', '', xf.read())
-              root = ET.fromstring(xml_content)
-              for file_elem in root.findall('file'):
-                  file_name = os.path.basename(file_elem.get('name', ''))
-                  for violation in file_elem.findall('violation'):
-                      line = violation.get('beginline', '')
-                      rule = violation.get('rule', '')
-                      priority = violation.get('priority', '')
-                      entry = (file_name, line, rule, priority)
-                      if priority == '1':
-                          p1_violations.append(entry)
-                      elif priority == '2':
-                          p2_violations.append(entry)
+          P1_COUNT=$(grep -c '|1$' "$VIOLATIONS_FILE" 2>/dev/null || true)
+          P2_COUNT=$(grep -c '|2$' "$VIOLATIONS_FILE" 2>/dev/null || true)
+          P1_COUNT=${P1_COUNT:-0}
+          P2_COUNT=${P2_COUNT:-0}
+          TOTAL=$((P1_COUNT + P2_COUNT))
 
-          with open(summary_file, 'a') as f:
-              f.write('## 🔍 Static Code Analysis Summary\n\n')
-              f.write('**Branch:** ' + os.environ.get('GITHUB_REF_NAME', '') + '\n')
-              f.write('**Commit:** ' + os.environ.get('GITHUB_SHA', '') + '\n')
-              f.write('**Triggered by:** Manual workflow dispatch\n\n')
-              f.write('### Analysis Scope\n')
-              f.write('Analyzed all Apex code in `force-app/` directory\n\n')
-              f.write('### PMD Ruleset Applied\n')
-              f.write('Custom ruleset: `.pmd/pmd-ruleset.xml`\n\n')
+          {
+            echo "## 🔍 Static Code Analysis Summary"
+            echo ""
+            echo "**Branch:** ${{ github.ref_name }}"
+            echo "**Commit:** ${{ github.sha }}"
+            echo "**Triggered by:** Manual workflow dispatch"
+            echo ""
+            echo "### Analysis Scope"
+            echo "Analyzed all Apex code in \`force-app/\` directory"
+            echo ""
+            echo "### PMD Ruleset Applied"
+            echo "Custom ruleset: \`.pmd/pmd-ruleset.xml\`"
+            echo ""
 
-              if not p1_violations and not p2_violations:
-                  f.write('### ✅ No Violations Found\n\n')
-              else:
-                  total = len(p1_violations) + len(p2_violations)
-                  f.write('### Violations Found: ' + str(total) + '\n\n')
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "### ✅ No Violations Found"
+              echo ""
+            else
+              echo "### Violations Found: $TOTAL"
+              echo ""
 
-                  if p1_violations:
-                      f.write('### ❌ Priority 1 violations detected. These violations block deployment.\n\n')
-                      f.write('| File | Line | Rule | Priority |\n')
-                      f.write('|------|------|------|----------|\n')
-                      for fname, line, rule, priority in p1_violations:
-                          f.write('| `' + fname + '` | ' + line + ' | ' + rule + ' | ' + priority + ' |\n')
-                      f.write('\n')
+              if [ "$P1_COUNT" -gt 0 ]; then
+                echo "### ❌ Priority 1 violations detected. These violations block deployment."
+                echo ""
+                echo "| File | Line | Rule | Priority |"
+                echo "|------|------|------|----------|"
+                grep '|1$' "$VIOLATIONS_FILE" | while IFS='|' read -r fname line rule priority; do
+                  echo "| \`$fname\` | $line | $rule | $priority |"
+                done
+                echo ""
+              fi
 
-                  if p2_violations:
-                      f.write('### ⚠️ Priority 2 violations detected. These violations should be reviewed.\n\n')
-                      f.write('| File | Line | Rule | Priority |\n')
-                      f.write('|------|------|------|----------|\n')
-                      for fname, line, rule, priority in p2_violations:
-                          f.write('| `' + fname + '` | ' + line + ' | ' + rule + ' | ' + priority + ' |\n')
-                      f.write('\n')
+              if [ "$P2_COUNT" -gt 0 ]; then
+                echo "### ⚠️ Priority 2 violations detected. These violations should be reviewed."
+                echo ""
+                echo "| File | Line | Rule | Priority |"
+                echo "|------|------|------|----------|"
+                grep '|2$' "$VIOLATIONS_FILE" | while IFS='|' read -r fname line rule priority; do
+                  echo "| \`$fname\` | $line | $rule | $priority |"
+                done
+                echo ""
+              fi
+            fi
 
-              f.write('### 📥 Download Reports\n')
-              f.write('The PMD analysis reports are available as artifacts in this workflow run:\n')
-              f.write('- HTML Report: `pmd-report/pmd-report.html`\n')
-              f.write('- XML Report: `pmd-report/pmd-report.xml`\n\n')
-              f.write('Access the artifact from the workflow run summary page.\n')
-          PYEOF
+            echo "### 📥 Download Reports"
+            echo "The PMD analysis reports are available as artifacts in this workflow run:"
+            echo "- HTML Report: \`pmd-report/pmd-report.html\`"
+            echo "- XML Report: \`pmd-report/pmd-report.xml\`"
+            echo ""
+            echo "Access the artifact from the workflow run summary page."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -f "$VIOLATIONS_FILE"
