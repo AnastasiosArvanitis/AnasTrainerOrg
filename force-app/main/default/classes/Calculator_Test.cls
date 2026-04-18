@@ -12,6 +12,12 @@ public with sharing class Calculator_Test {
         System.assertEquals(10, Calculator.add(0, 10), '0 + 10 should equal 10');
     }
 
+    /* 
+    
+    BIG COMMENT HERE
+
+    */
+
     @isTest
     static void CalculatorMultiply() {
         // basic multiplication
