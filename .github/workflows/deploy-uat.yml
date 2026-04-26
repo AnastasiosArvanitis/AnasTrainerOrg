@@ -26,10 +26,10 @@ jobs:
           
           # Create a secure temporary file for the private key from GitHub secret
           KEY_FILE=$(mktemp)
-          printf '%s' "${{ secrets.SF_JWT_KEY }}" > "$KEY_FILE"
+          printf '%s' "${{ secrets.SF_UAT_JWT_KEY }}" > "$KEY_FILE"
           
           # Authenticate using JWT
-          sf org login jwt --client-id "${{ secrets.SF_CONSUMER_KEY }}" --jwt-key-file "$KEY_FILE" --username "${{ secrets.SF_USERNAME }}" --instance-url "https://${{ secrets.SF_INSTANCE_URL }}" --set-default --alias uat
+          sf org login jwt --client-id "${{ secrets.SF_UAT_CLIENT_ID }}" --jwt-key-file "$KEY_FILE" --username "${{ secrets.SF_UAT_USERNAME }}" --instance-url "https://${{ secrets.SF_UAT_INSTANCE_URL }}" --set-default --alias uat
           
           # Remove the private key file for security
           rm -f "$KEY_FILE"
