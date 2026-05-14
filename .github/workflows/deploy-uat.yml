@@ -12,6 +12,8 @@ jobs:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       # Step 2: Install Salesforce CLI
       - name: Install Salesforce CLI
@@ -19,7 +21,24 @@ jobs:
           npm install -g @salesforce/cli
           sf --version
       
-      # Step 3: Authenticate to UAT Sandbox using JWT
+      # Step 3: Install sfdx-git-delta plugin
+      - name: Install sfdx-git-delta
+        run: |
+          echo y | sf plugins install sfdx-git-delta
+          sgd --version
+      
+      # Step 4: Generate delta package (only files changed in uat vs main)
+      - name: Generate delta package
+        id: delta
+        run: |
+          mkdir -p delta
+          sgd --to HEAD --from origin/main --output delta --generate-delta --source force-app
+          
+          echo "=== Delta package.xml ==="
+          cat delta/package/package.xml || echo "No package.xml generated"
+          echo "========================="
+      
+      # Step 5: Authenticate to UAT Sandbox using JWT
       - name: Authenticate to UAT
         run: |
           echo "Authenticating to UAT sandbox using JWT Bearer Flow..."
@@ -73,15 +92,15 @@ jobs:
             echo "TEST_LEVEL=RunSpecifiedTests" >> $GITHUB_ENV
           fi
       
-      # Step 5: Deploy all metadata to UAT
+      # Step 7: Deploy delta metadata to UAT
       - name: Deploy to UAT
         id: deploy
         run: |
-          echo "🚀 Deploying all metadata from force-app to UAT..."
+          echo "🚀 Deploying delta metadata to UAT..."
           echo "Test level: $TEST_LEVEL"
           
-          # Build the deployment command
-          DEPLOY_CMD="sf project deploy start --source-dir force-app"
+          # Deploy only the changed files via the generated delta package.xml
+          DEPLOY_CMD="sf project deploy start --manifest delta/package/package.xml"
           
           # Add test level
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
