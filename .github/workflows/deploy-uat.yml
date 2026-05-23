@@ -196,8 +196,22 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          if [ -f deploy-results.json ]; then
+            echo "### 📋 Deployed Components" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metadata Type | Component Name |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+            jq -r '
+              (.result.deployedSource // [])[] |
+              "| \(.type) | `\(.fullName)` |"
+            ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse deployed components._" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           if [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
             echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+            echo "All delta components were successfully deployed to the UAT sandbox." >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "The deployment to UAT encountered errors. Check the logs and the artifact for details." >> $GITHUB_STEP_SUMMARY
           fi
