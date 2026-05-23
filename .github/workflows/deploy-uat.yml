@@ -25,7 +25,7 @@ jobs:
       - name: Install sfdx-git-delta
         run: |
           echo y | sf plugins install sfdx-git-delta
-          sf sgd source delta --version
+          sf plugins | grep sfdx-git-delta
       
       # Step 4: Generate delta package (only files changed in uat vs main)
       - name: Generate delta package
