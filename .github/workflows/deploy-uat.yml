@@ -25,14 +25,14 @@ jobs:
       - name: Install sfdx-git-delta
         run: |
           echo y | sf plugins install sfdx-git-delta
-          sgd --version
+          sf sgd source delta --version
       
       # Step 4: Generate delta package (only files changed in uat vs main)
       - name: Generate delta package
         id: delta
         run: |
           mkdir -p delta
-          sgd --to HEAD --from origin/main --output delta --generate-delta --source force-app
+          sf sgd source delta --to HEAD --from origin/main --output delta --generate-delta --source force-app
           
           echo "=== Delta package.xml ==="
           cat delta/package/package.xml || echo "No package.xml generated"
