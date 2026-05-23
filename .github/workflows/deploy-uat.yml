@@ -37,9 +37,18 @@ jobs:
           echo "=== Delta package.xml ==="
           cat delta/package/package.xml || echo "No package.xml generated"
           echo "========================="
+          
+          if grep -q "<members>" delta/package/package.xml 2>/dev/null; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected, proceeding with deployment"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No changes detected in force-app compared to main — skipping deployment"
+          fi
       
       # Step 5: Authenticate to UAT Sandbox using JWT
       - name: Authenticate to UAT
+        if: steps.delta.outputs.has_changes == 'true'
         run: |
           echo "Authenticating to UAT sandbox using JWT Bearer Flow..."
           
@@ -55,14 +64,15 @@ jobs:
           
           echo "✅ Authentication successful"
       
-      # Step 4: Detect Apex classes for test execution
+      # Step 6: Detect Apex classes for test execution (from delta only)
       - name: Detect Apex classes for testing
         id: detect-tests
+        if: steps.delta.outputs.has_changes == 'true'
         run: |
-          echo "Detecting Apex classes in force-app directory..."
+          echo "Detecting changed Apex classes in delta..."
           
-          # Find all Apex class files, excluding test classes and meta.xml
-          APEX_CLASSES=$(find force-app -name "*.cls" -not -name "*_Test.cls" -not -name "*.cls-meta.xml" || true)
+          # Find changed Apex class files in delta only, excluding test classes and meta.xml
+          APEX_CLASSES=$(find delta/force-app -name "*.cls" -not -name "*_Test.cls" -not -name "*.cls-meta.xml" 2>/dev/null || true)
           
           if [ -z "$APEX_CLASSES" ]; then
             echo "No Apex classes found"
@@ -95,12 +105,19 @@ jobs:
       # Step 7: Deploy delta metadata to UAT
       - name: Deploy to UAT
         id: deploy
+        if: steps.delta.outputs.has_changes == 'true'
         run: |
           echo "🚀 Deploying delta metadata to UAT..."
           echo "Test level: $TEST_LEVEL"
           
           # Deploy only the changed files via the generated delta package.xml
           DEPLOY_CMD="sf project deploy start --manifest delta/package/package.xml"
+          
+          # Include destructive changes if sfdx-git-delta generated them
+          if [ -f delta/destructiveChanges/destructiveChanges.xml ]; then
+            echo "🗑️ Destructive changes detected, adding to deployment..."
+            DEPLOY_CMD="$DEPLOY_CMD --post-destructive-changes delta/destructiveChanges/destructiveChanges.xml"
+          fi
           
           # Add test level
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
@@ -166,8 +183,13 @@ jobs:
           echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
-          echo "Deployed all metadata from \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.delta.outputs.has_changes }}" != "true" ]; then
+            echo "### ⚠️ No Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "No metadata changes found in \`force-app/\` compared to \`main\`. Deployment was skipped." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
+            echo "Deployed delta metadata (files changed in \`uat\` branch compared to \`main\`)" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "$TEST_LEVEL" = "RunSpecifiedTests" ] && [ -f deploy-results.json ]; then
