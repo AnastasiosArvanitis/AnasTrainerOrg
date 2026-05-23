@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Test Pipeline PS</label>
+    <description>Basic permission set for pipeline testing purposes.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+</PermissionSet>

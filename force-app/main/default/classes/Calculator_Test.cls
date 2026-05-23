@@ -35,4 +35,19 @@ public with sharing class Calculator_Test {
         System.assertEquals(-8, Calculator.subtract(-5, 3), '-5 - 3 should equal -8');
         System.assertEquals(10, Calculator.subtract(10, 0), '10 - 0 should equal 10');
     }
+
+    @isTest
+    static void CalculatorDivide() {
+        // basic division
+        System.assertEquals(4, Calculator.divide(20, 5), '20 / 5 should equal 4');
+        // decimal result
+        System.assertEquals(2.5, Calculator.divide(5, 2), '5 / 2 should equal 2.5');
+        // division by zero should throw
+        try {
+            Calculator.divide(10, 0);
+            System.assert(false, 'Expected an exception for division by zero');
+        } catch (IllegalArgumentException e) {
+            System.assertEquals('Division by zero is not allowed.', e.getMessage());
+        }
+    }
 }

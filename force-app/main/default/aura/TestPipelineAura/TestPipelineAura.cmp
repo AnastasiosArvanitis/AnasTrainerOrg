@@ -1,0 +1,6 @@
+<aura:component description="Basic Aura component for pipeline testing purposes.">
+    <aura:attribute name="message" type="String" default="Pipeline test component deployed successfully!"/>
+    <div class="slds-box slds-theme_default">
+        <p>{!v.message}</p>
+    </div>
+</aura:component>
