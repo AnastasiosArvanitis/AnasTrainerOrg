@@ -170,14 +170,29 @@ jobs:
           echo "Deployed all metadata from \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ]; then
-            echo "### Test Classes Executed" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "$TEST_CLASSES" | tr ' ' '\n' >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ] && [ -f deploy-results.json ]; then
+            echo "### 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Class | Method | Result | Coverage |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            jq -r '
+              (.result.runTestResult.codeCoverage // []) as $cov |
+              (reduce $cov[] as $c ({};
+                . + {($c.name): (
+                  if $c.numLocations > 0
+                  then (($c.numLocations - $c.numLocationsNotCovered) * 100 / $c.numLocations | floor | tostring) + "%"
+                  else "N/A" end
+                )}
+              )) as $covMap |
+              ((.result.runTestResult.successes // [])[] |
+                "| `\(.name)` | `\(.methodName)` | ✅ Pass | \($covMap[.name] // "N/A") |"),
+              ((.result.runTestResult.failures // [])[] |
+                "| `\(.name)` | `\(.methodName)` | ❌ Fail | \($covMap[.name] // "N/A") |")
+            ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse test results._" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Tests" >> $GITHUB_STEP_SUMMARY
-            echo "No Apex tests were executed (no Apex classes found)." >> $GITHUB_STEP_SUMMARY
+            echo "No Apex tests were executed (no Apex classes in delta)." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
