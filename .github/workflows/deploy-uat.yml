@@ -198,7 +198,7 @@ jobs:
             echo "| Class | Method | Result | Coverage |" >> $GITHUB_STEP_SUMMARY
             echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
             jq -r '
-              (.result.runTestResult.codeCoverage // []) as $cov |
+              (.result.details.runTestResult.codeCoverage // []) as $cov |
               (reduce $cov[] as $c ({};
                 . + {($c.name): (
                   if $c.numLocations > 0
@@ -206,9 +206,9 @@ jobs:
                   else "N/A" end
                 )}
               )) as $covMap |
-              ((.result.runTestResult.successes // [])[] |
+              ((.result.details.runTestResult.successes // [])[] |
                 "| `\(.name)` | `\(.methodName)` | ✅ Pass | \($covMap[.name] // "N/A") |"),
-              ((.result.runTestResult.failures // [])[] |
+              ((.result.details.runTestResult.failures // [])[] |
                 "| `\(.name)` | `\(.methodName)` | ❌ Fail | \($covMap[.name] // "N/A") |")
             ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse test results._" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -224,8 +224,9 @@ jobs:
             echo "| Metadata Type | Component Name |" >> $GITHUB_STEP_SUMMARY
             echo "|---|---|" >> $GITHUB_STEP_SUMMARY
             jq -r '
-              (.result.deployedSource // [])[] |
-              "| \(.type) | `\(.fullName)` |"
+              (.result.details.componentSuccesses // [])[] |
+              select(.componentType != "") |
+              "| \(.componentType) | `\(.fullName)` |"
             ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse deployed components._" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
