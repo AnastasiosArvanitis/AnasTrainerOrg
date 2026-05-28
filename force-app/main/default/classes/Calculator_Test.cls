@@ -50,4 +50,34 @@ public with sharing class Calculator_Test {
             System.assertEquals('Division by zero is not allowed.', e.getMessage());
         }
     }
+
+    @isTest
+    static void CalculatorModulo() {
+        // basic remainder
+        System.assertEquals(1, Calculator.modulo(10, 3), '10 mod 3 should equal 1');
+        // zero remainder
+        System.assertEquals(0, Calculator.modulo(10, 5), '10 mod 5 should equal 0');
+        // modulo by zero should throw
+        try {
+            Calculator.modulo(10, 0);
+            System.assert(false, 'Expected an exception for division by zero');
+        } catch (IllegalArgumentException e) {
+            System.assertEquals('Division by zero is not allowed.', e.getMessage());
+        }
+    }
+
+    @isTest
+    static void CalculatorPower() {
+        // basic power
+        System.assertEquals(8.0, Calculator.power(2, 3), '2^3 should equal 8');
+        // power of zero
+        System.assertEquals(1.0, Calculator.power(5, 0), '5^0 should equal 1');
+        // negative exponent should throw
+        try {
+            Calculator.power(2, -1);
+            System.assert(false, 'Expected an exception for negative exponent');
+        } catch (IllegalArgumentException e) {
+            System.assertEquals('Exponent must be non-negative.', e.getMessage());
+        }
+    }
 }
