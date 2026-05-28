@@ -197,20 +197,27 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Class | Method | Result | Coverage |" >> $GITHUB_STEP_SUMMARY
             echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
-            jq -r '
-              (.result.details.runTestResult.codeCoverage // []) as $cov |
-              (reduce $cov[] as $c ({};
-                . + {($c.name): (
-                  if $c.numLocations > 0
-                  then (($c.numLocations - $c.numLocationsNotCovered) * 100 / $c.numLocations | floor | tostring) + "%"
-                  else "N/A" end
-                )}
-              )) as $covMap |
-              ((.result.details.runTestResult.successes // [])[] |
-                "| `\(.name)` | `\(.methodName)` | ✅ Pass | \($covMap[.name] // "N/A") |"),
-              ((.result.details.runTestResult.failures // [])[] |
-                "| `\(.name)` | `\(.methodName)` | ❌ Fail | \($covMap[.name] // "N/A") |")
-            ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse test results._" >> $GITHUB_STEP_SUMMARY
+            TEST_ROWS=$(
+              jq -r '
+                (.result.details.runTestResult.codeCoverage // []) as $cov |
+                (reduce $cov[] as $c ({};
+                  . + {($c.name): (
+                    if $c.numLocations > 0
+                    then (($c.numLocations - $c.numLocationsNotCovered) * 100 / $c.numLocations | floor | tostring) + "%"
+                    else "N/A" end
+                  )}
+                )) as $covMap |
+                ((.result.details.runTestResult.successes // [])[] |
+                  "| `\(.name)` | `\(.methodName)` | ✅ Pass | \($covMap[.name] // "N/A") |"),
+                ((.result.details.runTestResult.failures // [])[] |
+                  "| `\(.name)` | `\(.methodName)` | ❌ Fail | \($covMap[.name] // "N/A") |")
+              ' deploy-results.json 2>/dev/null || true
+            )
+            if [ -z "$TEST_ROWS" ]; then
+              echo "| — | — | ⚠️ No tests ran (possible compile error) | — |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "$TEST_ROWS" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Tests" >> $GITHUB_STEP_SUMMARY
@@ -221,12 +228,14 @@ jobs:
           if [ -f deploy-results.json ]; then
             echo "### 📋 Deployed Components" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Metadata Type | Component Name |" >> $GITHUB_STEP_SUMMARY
-            echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Metadata Type | Component Name | Error |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
             jq -r '
-              (.result.details.componentSuccesses // [])[] |
-              select(.componentType != "") |
-              "| \(.componentType) | `\(.fullName)` |"
+              ((.result.details.componentSuccesses // [])[] |
+                select(.componentType != "") |
+                "| ✅ | \(.componentType) | `\(.fullName)` | |"),
+              ((.result.details.componentFailures // [])[] |
+                "| ❌ | \(.componentType) | `\(.fullName)` | \(.problem) |")
             ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse deployed components._" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
