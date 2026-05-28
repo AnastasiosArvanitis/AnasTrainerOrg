@@ -4,14 +4,6 @@
  * @date February 2026
  */
 public with sharing class Calculator {
-
-    // INTENTIONAL BREAK: reference to non-existent class to simulate a broken build
-    private static String broken = NonExistentClass.doSomething();
-
-    /**
-     * @description Simple method to add two numbers
-     * @param a First number
-     * @param b Second number
      * @return Sum of a and b
      */
     public static Integer add(Integer a, Integer b) {
