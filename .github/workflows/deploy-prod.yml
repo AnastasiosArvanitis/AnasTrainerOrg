@@ -14,6 +14,8 @@ jobs:
       # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       # Step 2: Install Salesforce CLI
       - name: Install Salesforce CLI
@@ -21,8 +23,34 @@ jobs:
           npm install -g @salesforce/cli
           sf --version
       
-      # Step 3: Authenticate to PROD using JWT
+      # Step 3: Install sfdx-git-delta plugin
+      - name: Install sfdx-git-delta
+        run: |
+          echo y | sf plugins install sfdx-git-delta
+          sf plugins | grep sfdx-git-delta
+      
+      # Step 4: Generate delta package (only files changed in the last merge to main)
+      - name: Generate delta package
+        id: delta
+        run: |
+          mkdir -p delta
+          sf sgd source delta --to HEAD --from HEAD~1 --output delta --generate-delta --source force-app
+          
+          echo "=== Delta package.xml ==="
+          cat delta/package/package.xml || echo "No package.xml generated"
+          echo "========================="
+          
+          if grep -q "<members>" delta/package/package.xml 2>/dev/null || grep -q "<members>" delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected, proceeding with deployment"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No changes detected compared to previous commit — skipping deployment"
+          fi
+      
+      # Step 5: Authenticate to PROD using JWT
       - name: Authenticate to PROD
+        if: steps.delta.outputs.has_changes == 'true'
         run: |
           echo "Authenticating to PROD org using JWT Bearer Flow..."
           
@@ -38,41 +66,25 @@ jobs:
           
           echo "✅ Authentication to PROD successful"
       
-      # Step 4: Configure test execution (always run tests in PROD)
-      - name: Configure test execution
-        run: |
-          echo "Configuring test execution for PROD..."
-          
-          # For PROD, always run Apex tests (no NoTestRun allowed)
-          TEST_LEVEL=RunLocalTests
-          TEST_CLASSES=""
-          
-          echo "Using test level: $TEST_LEVEL"
-          echo "TEST_LEVEL=$TEST_LEVEL" >> $GITHUB_ENV
-          echo "TEST_CLASSES=$TEST_CLASSES" >> $GITHUB_ENV
-      
-      # Step 5: Deploy all metadata to PROD
+      # Step 6: Deploy delta metadata to PROD
       - name: Deploy to PROD
         id: deploy
+        if: steps.delta.outputs.has_changes == 'true'
         run: |
-          echo "🚀 Deploying all metadata from force-app to PROD..."
-          echo "Test level: $TEST_LEVEL"
+          echo "🚀 Deploying delta metadata to PROD..."
+          echo "Test level: RunLocalTests"
           
-          # Build the deployment command
-          DEPLOY_CMD="sf project deploy start --source-dir force-app"
+          # Deploy only the changed files via the generated delta package.xml
+          DEPLOY_CMD="sf project deploy start --manifest delta/package/package.xml"
           
-          # Add test level (always run tests in PROD)
-          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ] && [ -n "$TEST_CLASSES" ]; then
-            echo "Running specified tests: $TEST_CLASSES"
-            TEST_FLAGS=""
-            for test_class in $TEST_CLASSES; do
-              TEST_FLAGS="$TEST_FLAGS --tests $test_class"
-            done
-            DEPLOY_CMD="$DEPLOY_CMD --test-level RunSpecifiedTests $TEST_FLAGS"
-          else
-            echo "Running local tests (RunLocalTests)"
-            DEPLOY_CMD="$DEPLOY_CMD --test-level RunLocalTests"
+          # Include destructive changes if sfdx-git-delta generated them
+          if [ -f delta/destructiveChanges/destructiveChanges.xml ]; then
+            echo "🗑️ Destructive changes detected, adding to deployment..."
+            DEPLOY_CMD="$DEPLOY_CMD --post-destructive-changes delta/destructiveChanges/destructiveChanges.xml"
           fi
+          
+          # Always run local tests in PROD
+          DEPLOY_CMD="$DEPLOY_CMD --test-level RunLocalTests"
           
           # Add JSON output for parsing
           DEPLOY_CMD="$DEPLOY_CMD --json"
@@ -104,7 +116,7 @@ jobs:
             echo "deployment_status=success" >> $GITHUB_OUTPUT
           fi
       
-      # Step 6: Upload deployment results as artifacts
+      # Step 7: Upload deployment results as artifacts
       - name: Upload deployment results
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,7 +125,7 @@ jobs:
           path: deploy-results.json
           retention-days: 30
       
-      # Step 7: Add deployment summary
+      # Step 8: Add deployment summary
       - name: Add deployment summary
         if: always()
         run: |
@@ -124,24 +136,70 @@ jobs:
           echo "**Triggered by:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
-          echo "Deployed all metadata from \`force-app/\` directory" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### Test Configuration" >> $GITHUB_STEP_SUMMARY
-          echo "**Test Level:** $TEST_LEVEL" >> $GITHUB_STEP_SUMMARY
-          if [ "$TEST_LEVEL" = "RunSpecifiedTests" ] && [ -n "$TEST_CLASSES" ]; then
-            echo "**Test Classes:**" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "$TEST_CLASSES" | tr ' ' '\n' >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.delta.outputs.has_changes }}" != "true" ]; then
+            echo "### ⚠️ No Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "No metadata changes found compared to the previous commit. Deployment was skipped." >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Test Classes:** All local tests (RunLocalTests)" >> $GITHUB_STEP_SUMMARY
+            echo "### Deployment Scope" >> $GITHUB_STEP_SUMMARY
+            echo "Deployed delta metadata (files changed in the last merge to \`main\`)" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
+          if [ -f deploy-results.json ]; then
+            echo "### 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Class | Method | Result | Coverage |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            TEST_ROWS=$(
+              jq -r '
+                (.result.details.runTestResult.codeCoverage // []) as $cov |
+                (reduce $cov[] as $c ({};
+                  . + {($c.name): (
+                    if $c.numLocations > 0
+                    then (($c.numLocations - $c.numLocationsNotCovered) * 100 / $c.numLocations | floor | tostring) + "%"
+                    else "N/A" end
+                  )}
+                )) as $covMap |
+                ((.result.details.runTestResult.successes // [])[] |
+                  "| `\(.name)` | `\(.methodName)` | ✅ Pass | \($covMap[.name] // "N/A") |"),
+                ((.result.details.runTestResult.failures // [])[] |
+                  "| `\(.name)` | `\(.methodName)` | ❌ Fail | \($covMap[.name] // "N/A") |")
+              ' deploy-results.json 2>/dev/null || true
+            )
+            if [ -z "$TEST_ROWS" ]; then
+              echo "| — | — | ⚠️ No tests ran (possible compile error) | — |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "$TEST_ROWS" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Tests" >> $GITHUB_STEP_SUMMARY
+            echo "No Apex tests were executed (no Apex classes in delta)." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f deploy-results.json ]; then
+            echo "### 📋 Deployed Components" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Metadata Type | Component Name | Error |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            jq -r '
+              ((.result.details.componentSuccesses // [])[] |
+                select(.componentType != "") |
+                "| ✅ | \(.componentType) | `\(.fullName)` | |"),
+              ((.result.details.componentFailures // [])[] |
+                "| ❌ | \(.componentType) | `\(.fullName)` | \(.problem) |")
+            ' deploy-results.json >> $GITHUB_STEP_SUMMARY || echo "_Could not parse deployed components._" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ steps.delta.outputs.has_changes }}" != "true" ]; then
+            echo "### ⏭️ Deployment Status: SKIPPED" >> $GITHUB_STEP_SUMMARY
+            echo "No metadata changes detected — deployment was not triggered." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
             echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+            echo "All delta components were successfully deployed to the production org." >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Deployment Status: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "The deployment to PROD encountered errors. Check the logs and the artifact for details." >> $GITHUB_STEP_SUMMARY
           fi

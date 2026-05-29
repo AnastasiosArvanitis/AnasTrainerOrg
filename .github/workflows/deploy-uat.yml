@@ -38,7 +38,7 @@ jobs:
           cat delta/package/package.xml || echo "No package.xml generated"
           echo "========================="
           
-          if grep -q "<members>" delta/package/package.xml 2>/dev/null; then
+          if grep -q "<members>" delta/package/package.xml 2>/dev/null || grep -q "<members>" delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "✅ Changes detected, proceeding with deployment"
           else
@@ -240,7 +240,10 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
+          if [ "${{ steps.delta.outputs.has_changes }}" != "true" ]; then
+            echo "### ⏭️ Deployment Status: SKIPPED" >> $GITHUB_STEP_SUMMARY
+            echo "No metadata changes detected — deployment was not triggered." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.deploy.outputs.deployment_status }}" = "success" ]; then
             echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
             echo "All delta components were successfully deployed to the UAT sandbox." >> $GITHUB_STEP_SUMMARY
           else
